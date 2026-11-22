@@ -24,39 +24,59 @@ share them.
 > Portal 2, Half-Life, Steam and Source are trademarks of Valve Corporation.
 > Provided as is, without warranty.
 
-## Status at a glance (8 November 2026)
+## Status at a glance (22 November 2026)
 
-**Portal 2**: fully playable.
+Latest release: [v0.4.0](https://github.com/kanapitsas/source-recomp/releases/tag/v0.4.0)
+(18 November). Items marked *`main` only* are merged but not in a release yet.
+
+| Game | Mac | iPhone |
+|---|---|---|
+| **Portal 2** | ✅ Fully playable | ✅ Steady 60 fps on an iPhone 15 Pro Max |
+| **Half-Life 2** | 🚧 Main game played for a few hours | 🚧 60 fps in a short test |
+| **Episode One, Episode Two, Lost Coast** | 🚧 First maps load, not played through | 🚧 Data is copied, not played |
+| **Portal** | 🚧 First chamber played, six more load and run | 🚧 Installs, starts and renders, no chamber played |
+
+✅ playable · 🚧 experimental: a crash ending with `target not recompiled` is
+a missing root, please report it with the log.
+
+**Portal 2**
 
 - **Mac**: on an M3 Pro, Metal (the default) runs a scene at 122 fps where
   OpenGL gets 81 (2560×1440, MSAA 4×;
   [measurements](STATUS.md#measurements)).
-- **iPhone**: steady 60 fps on an iPhone 15 Pro Max, with touch controls and
-  portals fired by **tapping the back of the phone**.
+- **iPhone**: touch controls and portals fired by **tapping the back of the
+  phone**.
 - **Controllers**: work on Mac and iPhone (tested with an 8BitDo SN30 Pro).
   On Mac, turn Steam Input off for Portal 2.
 - **Co-op** over the local network: a Mac hosts, an iPhone or a second copy
   on the same Mac joins. Connection and map load are checked; a full co-op
   course has not been played yet.
+- **Puzzle Maker** (#42): Build and Play works on Mac, with the map compilers
+  recompiled too. Opt-in with `./setup.sh --puzzle-maker`, about ten more
+  minutes and 220 MB ([details](docs/puzzlemaker.md)). *`main` only*: the
+  installer's checkbox for it (#49), and publishing chambers to the Workshop
+  (#50), reported working by a contributor but not tested by us yet.
+- **Native plugins** (#32): a server plugin built as a macOS arm64 dylib loads
+  where the game expects a Linux `.so`
+  ([details](docs/native-plugins.md)).
 
-**Half-Life 2** (experimental), with Episode One, Episode Two and Lost Coast
-([details](#half-life-2-experimental)):
+**Half-Life 2** ([details](#half-life-2-experimental)):
 
-- **Mac**: 120 fps with Metal on an M3 Pro at 1280×720. Players report an hour on an M4 Pro with no issue, and mostly
-  60 fps (dips to 50) on an M4 Air at 2560×1664, maximum settings, with a
-  DualShock 4.
-- **Episodes and Lost Coast**: their first maps load; they have not been
-  played through.
-- **iPhone**: 60 fps on an iPhone 15 Pro Max, with touch controls and gyro
-  aiming, in a short test.
+- **Mac**: 120 fps with Metal on an M3 Pro at 1280×720. Players report an hour
+  on an M4 Pro with no issue, and mostly 60 fps (dips to 50) on an M4 Air at
+  2560×1664, maximum settings, with a DualShock 4.
+- **iPhone**: touch controls and gyro aiming, one short session.
 
-**Portal** (experimental, [details](#portal-experimental)):
+**Portal** ([details](#portal-experimental), contributed in #31):
 
-- **Mac**: the first chambers are playable; the build uses the same
-  recompiler as Portal 2, with its own indirect call roots.
-- **iPhone**: the app installs, starts and renders; a short session only.
+- **Mac**: `testchmb_a_00` played from the app; `testchmb_a_01` to `a_05` and
+  `a_10` load and run without trapping
+  ([what was tested](docs/portal1.md#what-was-tested)). It needs the current
+  Linux binaries (depot 404). The `save` crash of #44 is fixed in the
+  recompiler and checked in Half-Life 2, not confirmed in Portal yet.
+- **iPhone**: a short session only (menu and touch layout).
 
-**All three games**
+**All games**
 
 - **Install**: the Natif Installer app from the
   [releases](https://github.com/kanapitsas/source-recomp/releases), or one
@@ -64,6 +84,7 @@ share them.
   tools are required.
 - **Multiplayer**: only Portal 2's LAN co-op. No Steam invites or online
   play, and Half-Life 2: Deathmatch is not supported.
+- **In review**: Portal Stories: Mel (#52), not merged.
 
 ## How it works
 
@@ -354,25 +375,28 @@ profiles.
 | Rendering | Metal renderer through mtld3d (about +50 % fps on Mac), OpenGL fallback | ✅ |
 | iPhone | Single player at a steady 60 fps, touch controls, Settings page | ✅ |
 | iPhone | Portals fired by tapping the back of the phone | ✅ |
-| iPhone | Pause in the background, haptic feedback, 30/40 fps caps with auto power saving, MetalFX upscaling | 🚧 |
-| Install | One-command install (`setup.sh`) and the Natif Installer app, for one game or both | ✅ |
+| iPhone | Pause in the background, haptic feedback, 30/40 fps caps with auto power saving, MetalFX upscaling (gain not measured yet) | ✅ |
+| Install | One-command install (`setup.sh`) and the Natif Installer app, for one game or all three | ✅ |
 | Co-op | LAN co-op: a Mac hosts, an iPhone or a second copy on the same Mac joins by IP address | ✅ |
-| Co-op | Find the host automatically on the local network (Bonjour), host/join in the iPhone settings | 🚧 |
+| Co-op | Find the host automatically on the local network (Bonjour), host/join in the iPhone settings: started on a branch, not merged or tested | 🚧 |
 | Co-op | Play a full co-op course with two people (only the connection and the map load are checked so far) | 📅 |
 | Co-op | Co-op through Steam invites, over the internet and with Windows or Linux players | 📅 |
-| iPhone | Record raw back taps from the Settings page | 🚧 |
+| iPhone | Record raw back taps from the Settings page | ✅ |
 | iPhone | Learn each player's back taps automatically from those recordings, instead of fixed thresholds | 📅 |
-| Saves | Copy saves between Mac and iPhone over the cable ([how](docs/usage.md#saves-between-mac-and-iphone-portal-2)); an iCloud version would need a paid Apple developer account | 🚧 |
+| Saves | Copy Portal 2 saves between Mac and iPhone over the cable ([how](docs/usage.md#saves-between-mac-and-iphone-portal-2)) | ✅ |
+| Saves | Sync saves through iCloud (needs a paid Apple developer account) | 💡 |
 | Controllers | Physical controller on Mac (needs Steam Input off for Portal 2, [why](docs/usage.md#controllers)) and iPhone, tested with an 8BitDo in Switch mode | ✅ |
 | Controllers | A full playthrough with a controller, and other controllers (Xbox, DualSense) | 📅 |
 | Controllers | Button prompts and default bindings that match the controller | 💡 |
 | Community | Community maps copied by hand, loaded with `+map` | 📅 |
+| Community | Puzzle Maker Build and Play on Mac, with the map compilers recompiled (opt-in, [details](docs/puzzlemaker.md)) | ✅ |
+| Community | Native server plugins (macOS arm64 dylibs) in place of Linux `.so` plugins ([details](docs/native-plugins.md)) | ✅ |
 | Community | Publish Puzzle Maker chambers to the Steam Workshop on Mac: reported working by a contributor, not tested by us yet ([details](docs/steam.md)) | 🚧 |
 | Community | Browse and subscribe to Workshop chambers on Mac (enumeration methods bridged, not tested) | 🚧 |
 | Half-Life 2 | Mac app from the same recompiler, installer and checkout as Portal 2, main game played for a few hours | 🚧 |
 | Half-Life 2 | iPhone app: 60 fps on an iPhone 15 Pro Max in a first short test (`./setup.sh --game hl2 --ios`, [details](docs/hl2.md#iphone)) | 🚧 |
 | Half-Life 2 | The episodes and Lost Coast: first maps load and render, not played through | 🚧 |
-| Portal | Mac app from the same recompiler and checkout: menu and first chambers, more roots needed for later chambers | 🚧 |
+| Portal | Mac app from the same recompiler and checkout: first chamber played, six more load and run, later chambers untested | 🚧 |
 | Portal | iPhone app: installs, starts and renders in a short session (`./setup.sh --game portal1 --ios`, [details](docs/portal1.md#iphone)) | 🚧 |
 | Rendering | Ray-traced lighting with Metal on M3 and A17 Pro GPUs, in the spirit of Portal with RTX (NVIDIA's RTX Remix is Windows and NVIDIA only, so it cannot be reused) | 💡 |
 
