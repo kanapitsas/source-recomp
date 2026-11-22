@@ -24,22 +24,34 @@ share them.
 > Portal 2, Half-Life, Steam and Source are trademarks of Valve Corporation.
 > Provided as is, without warranty.
 
-## Status at a glance (22 November 2026)
+## Find your way
 
-Latest release: [v0.4.0](https://github.com/kanapitsas/source-recomp/releases/tag/v0.4.0)
+| I want to | Go to |
+|---|---|
+| **See what works** | [Status](#status) · [Roadmap and limits](#roadmap-and-limits) |
+| **Play on a Mac** | [Quick start](#quick-start-mac) · [Full install](#install-on-mac) |
+| **Play on an iPhone** | [Install on iPhone](#install-on-iphone) |
+| **Fix a problem** | [Troubleshooting](#troubleshooting) |
+| **Understand the project** | [How it works](#how-it-works) · [Documentation](#documentation) |
+| **Help** | [Contributing](#contributing) · [Development and tests](#development-and-tests) |
+
+## Status
+
+Updated 22 November 2026. Latest release:
+[v0.4.0](https://github.com/kanapitsas/source-recomp/releases/tag/v0.4.0)
 (18 November). Items marked *`main` only* are merged but not in a release yet.
 
 | Game | Mac | iPhone |
 |---|---|---|
-| **Portal 2** | ✅ Fully playable | ✅ Steady 60 fps on an iPhone 15 Pro Max |
-| **Half-Life 2** | 🚧 Main game played for a few hours | 🚧 60 fps in a short test |
-| **Episode One, Episode Two, Lost Coast** | 🚧 First maps load, not played through | 🚧 Data is copied, not played |
-| **Portal** | 🚧 First chamber played, six more load and run | 🚧 Installs, starts and renders, no chamber played |
+| [**Portal 2**](#portal-2) | **Playable** | **Playable**, steady 60 fps on an iPhone 15 Pro Max |
+| [**Half-Life 2**](#half-life-2) | Experimental: main game played for a few hours | Experimental: 60 fps in a short test |
+| **Episode One, Episode Two, Lost Coast** | Experimental: first maps load, not played through | Experimental: data is copied, not played |
+| [**Portal**](#portal) | Experimental: first chamber played, six more load and run | Experimental: installs, starts and renders, no chamber played |
 
-✅ playable · 🚧 experimental: a crash ending with `target not recompiled` is
-a missing root, please report it with the log.
+In an experimental game, a crash ending with `target not recompiled` is a
+missing root. Please report it with the log.
 
-**Portal 2**
+### Portal 2
 
 - **Mac**: on an M3 Pro, Metal (the default) runs a scene at 122 fps where
   OpenGL gets 81 (2560×1440, MSAA 4×;
@@ -60,14 +72,18 @@ a missing root, please report it with the log.
   where the game expects a Linux `.so`
   ([details](docs/native-plugins.md)).
 
-**Half-Life 2** ([details](#half-life-2-experimental)):
+### Half-Life 2
+
+[Full details](#half-life-2-experimental).
 
 - **Mac**: 120 fps with Metal on an M3 Pro at 1280×720. Players report an hour
   on an M4 Pro with no issue, and mostly 60 fps (dips to 50) on an M4 Air at
   2560×1664, maximum settings, with a DualShock 4.
 - **iPhone**: touch controls and gyro aiming, one short session.
 
-**Portal** ([details](#portal-experimental), contributed in #31):
+### Portal
+
+Contributed in #31. [Full details](#portal-experimental).
 
 - **Mac**: `testchmb_a_00` played from the app; `testchmb_a_01` to `a_05` and
   `a_10` load and run without trapping
@@ -76,7 +92,7 @@ a missing root, please report it with the log.
   recompiler and checked in Half-Life 2, not confirmed in Portal yet.
 - **iPhone**: a short session only (menu and touch layout).
 
-**All games**
+### All games
 
 - **Install**: the Natif Installer app from the
   [releases](https://github.com/kanapitsas/source-recomp/releases), or one
@@ -85,6 +101,27 @@ a missing root, please report it with the log.
 - **Multiplayer**: only Portal 2's LAN co-op. No Steam invites or online
   play, and Half-Life 2: Deathmatch is not supported.
 - **In review**: Portal Stories: Mel (#52), not merged.
+
+## Quick start (Mac)
+
+You need an Apple silicon Mac on macOS 13 or newer, and the game installed
+in Steam with the account that owns it.
+
+1. Download `Natif-Installer-<version>.zip` from the
+   [latest release](https://github.com/kanapitsas/source-recomp/releases/latest),
+   unzip it and open **Natif Installer**. It offers to install the Xcode
+   command line tools if they are missing.
+2. Get the game's Linux binaries: click **Open Steam console** in the
+   installer and paste the command it shows, `download_depot 620 661` for
+   Portal 2 (`220 224` for Half-Life 2, `400 404` for Portal). Wait for
+   “Depot download complete”.
+3. When the installer has found them, tick the games and click **Build**
+   (about 10 minutes each for Portal 2 and Portal, 10 to 20 for Half-Life 2),
+   then open the game from the installer. The apps are in `~/Applications`.
+
+Terminal instead of the installer, iPhone, and the details:
+[What you need](#what-you-need), [Install on Mac](#install-on-mac),
+[Install on iPhone](#install-on-iphone).
 
 ## How it works
 
@@ -448,6 +485,30 @@ profiles.
 - [docs/gl-audit.md](docs/gl-audit.md): OpenGL audit of togl (25 Oct. 2026)
 - [docs/lifter-coverage.md](docs/lifter-coverage.md): lifter coverage
 - [STATUS.md](STATUS.md): the development log, with every measurement
+
+## Contributing
+
+Outside contributions merged so far:
+#1 (d-ismlv, a Steam bridge call),
+#2 (lukedavid2, the fullscreen mouse offset on notched MacBooks),
+#31 (runty, Portal), #32 (hammerill, native plugins),
+#42 (feolaney, the Puzzle Maker),
+#50 and #51 (Zertrox123, Workshop publishing, file inodes and the lifter).
+
+Welcome:
+
+- **Crash reports** with the end of the game's log
+  (`~/Library/Logs/Portal2Natif.log`, `HalfLife2Natif.log`,
+  `PortalNatif.log`) and your Mac or iPhone model. A
+  `target not recompiled` line names an indirect call root to add.
+- **Test reports** for what is not tested yet: Portal's later chambers, a
+  full co-op course, the Half-Life 2 episodes, other controllers, other Macs
+  and iPhones.
+- **Pull requests** that pass `make check` (what CI runs). For a new game or
+  a large change, open an issue first, as in #29.
+
+Never attach game files, generated C, built apps or binaries to an issue or
+a pull request: they contain Valve's game.
 
 ## Credits
 
