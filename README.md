@@ -37,7 +37,7 @@ share them.
 
 ## Status
 
-Updated 22 November 2026. Latest release:
+Updated 24 November 2026. Latest release:
 [v0.4.0](https://github.com/kanapitsas/source-recomp/releases/tag/v0.4.0)
 (18 November). Items marked *`main` only* are merged but not in a release yet.
 
@@ -46,7 +46,7 @@ Updated 22 November 2026. Latest release:
 | [**Portal 2**](#portal-2) | **Playable** | **Playable**, steady 60 fps on an iPhone 15 Pro Max |
 | [**Half-Life 2**](#half-life-2) | Experimental: main game played for a few hours | Experimental: 60 fps in a short test |
 | **Episode One, Episode Two, Lost Coast** | Experimental: first maps load, not played through | Experimental: data is copied, not played |
-| [**Portal**](#portal) | Experimental: first chamber played, six more load and run | Experimental: installs, starts and renders, no chamber played |
+| [**Portal**](#portal) | Experimental: first chamber played, six more load and run | Experimental: a user played up to chamber 16 at 60 fps on an iPhone 18 Pro (#53) |
 
 In an experimental game, a crash ending with `target not recompiled` is a
 missing root. Please report it with the log.
@@ -90,7 +90,9 @@ Contributed in #31. [Full details](#portal-experimental).
   ([what was tested](docs/portal1.md#what-was-tested)). It needs the current
   Linux binaries (depot 404). The `save` crash of #44 is fixed in the
   recompiler and checked in Half-Life 2, not confirmed in Portal yet.
-- **iPhone**: a short session only (menu and touch layout).
+- **iPhone**: a user played up to chamber 16 on an iPhone 18 Pro at a steady
+  60 fps without a crash (#53); back taps were not reliable there. Our own
+  test is a short session only (menu and touch layout).
 
 ### All games
 

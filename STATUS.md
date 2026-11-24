@@ -15,7 +15,8 @@
   in a short test ([docs/hl2.md](docs/hl2.md)).
 - **Portal** (experimental, contributed in #31): built into `build/portal1`
   from the current Linux binaries (depot 404); the first chambers have been
-  played on a Mac ([docs/portal1.md](docs/portal1.md)). The `save` crash of
+  played on a Mac, and a user played up to chamber 16 on an iPhone 18 Pro
+  (#53, [docs/portal1.md](docs/portal1.md)). The `save` crash of
   #44 is fixed in the lifter and checked in Half-Life 2, which shares that
   code; not confirmed in Portal yet.
 - **Portal 2 Puzzle Maker** (#42): Build and Play works on Mac. VBSP, VVIS
