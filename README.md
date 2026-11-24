@@ -44,7 +44,7 @@ Updated 24 November 2026. Latest release:
 | Game | Mac | iPhone |
 |---|---|---|
 | [**Portal 2**](#portal-2) | **Playable** | **Playable**, steady 60 fps on an iPhone 15 Pro Max |
-| [**Half-Life 2**](#half-life-2) | Experimental: main game played for a few hours | Experimental: 60 fps in a short test |
+| [**Half-Life 2**](#half-life-2) | **Playable**: main game played for hours by us and by several players | Experimental: 60 fps in a short test |
 | **Episode One, Episode Two, Lost Coast** | Experimental: first maps load, not played through | Experimental: data is copied, not played |
 | [**Portal**](#portal) | Experimental: first chamber played, six more load and run | Experimental: a user played up to chamber 16 at 60 fps on an iPhone 18 Pro (#53) |
 
@@ -74,11 +74,13 @@ missing root. Please report it with the log.
 
 ### Half-Life 2
 
-[Full details](#half-life-2-experimental).
+[Full details](#half-life-2-and-its-episodes).
 
-- **Mac**: 120 fps with Metal on an M3 Pro at 1280×720. Players report an hour
-  on an M4 Pro with no issue, and mostly 60 fps (dips to 50) on an M4 Air at
-  2560×1664, maximum settings, with a DualShock 4.
+- **Mac**: playable. 120 fps with Metal on an M3 Pro at 1280×720. Players
+  report an hour on an M4 Pro with no issue, play from Highway 17 on at mostly
+  60 fps (dips to 50) on an M4 Air at 2560×1664, maximum settings, with a
+  DualShock 4, and it running on M2 and M5 Macs. No game bug is open; nobody
+  has reported a start-to-end playthrough yet.
 - **iPhone**: touch controls and gyro aiming, one short session.
 
 ### Portal
@@ -303,7 +305,7 @@ For each game installed, it asks before moving the app and its log to the
 Trash, and asks again for the saves; then, on its own yes, the installer's
 build folder. It never touches the Steam game files or the Linux binaries.
 
-## Half-Life 2 (experimental)
+## Half-Life 2 and its episodes
 
 The same recompiler also turns the Linux version of **Half-Life 2** (the
 current Steam build, 20th anniversary update) into a native Mac app. **You
@@ -318,6 +320,8 @@ installer, or run `./setup.sh` (or `./setup.sh --game hl2`) in the same
 checkout as Portal 2: each game has its own build folder. It creates
 `~/Applications/Half-Life 2 Natif.app`, with its own saves folder.
 
+- **Status**: the main game is playable on Mac; the episodes, Lost Coast
+  and the iPhone app are experimental.
 - **Tested**: a few hours of the main game on an M3 Pro, at 1280×720:
   120 fps with Metal (the display's limit; the default, as for Portal 2) and 91 with
   OpenGL (`--release` build).
@@ -436,7 +440,7 @@ profiles.
 | Community | Native server plugins (macOS arm64 dylibs) in place of Linux `.so` plugins ([details](docs/native-plugins.md)) | ✅ |
 | Community | Publish Puzzle Maker chambers to the Steam Workshop on Mac: reported working by a contributor, not tested by us yet ([details](docs/steam.md)) | 🚧 |
 | Community | Browse and subscribe to Workshop chambers on Mac (enumeration methods bridged, not tested) | 🚧 |
-| Half-Life 2 | Mac app from the same recompiler, installer and checkout as Portal 2, main game played for a few hours | 🚧 |
+| Half-Life 2 | Mac app from the same recompiler, installer and checkout as Portal 2: main game playable, played for hours by us and by several players | ✅ |
 | Half-Life 2 | iPhone app: 60 fps on an iPhone 15 Pro Max in a first short test (`./setup.sh --game hl2 --ios`, [details](docs/hl2.md#iphone)) | 🚧 |
 | Half-Life 2 | The episodes and Lost Coast: first maps load and render, not played through | 🚧 |
 | Portal | Mac app from the same recompiler and checkout: first chamber played, six more load and run, later chambers untested | 🚧 |
@@ -481,7 +485,7 @@ profiles.
 ## Documentation
 
 - [docs/usage.md](docs/usage.md): language, controllers, LAN co-op, manual build, diagnostics
-- [docs/hl2.md](docs/hl2.md): Half-Life 2 (experimental)
+- [docs/hl2.md](docs/hl2.md): Half-Life 2 and its episodes
 - [docs/portal1.md](docs/portal1.md): Portal (experimental)
 - [docs/ios.md](docs/ios.md): iOS port, controls, settings, back taps
 - [docs/backtap.md](docs/backtap.md): back-tap detector, recordings and dataset
