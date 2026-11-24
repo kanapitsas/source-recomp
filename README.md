@@ -350,10 +350,14 @@ its own build folder (`build/portal1`). It creates
   the later `testchmb_a_10` started with `+map` and left running 70 s without
   trapping (see [docs/portal1.md](docs/portal1.md#what-was-tested)); the
   indirect call roots are still being discovered, so later chambers may trap.
-- **iPhone**: `./setup.sh --game portal1 --ios` builds the app; it installs,
-  starts and renders (short session only).
+- **iPhone**: `./setup.sh --game portal1 --ios` builds the app. A user played
+  up to chamber 16 on an iPhone 18 Pro at a steady 60 fps without a crash
+  ([#53](https://github.com/kanapitsas/source-recomp/issues/53)); our own
+  test is a short session only.
 - **Touch**: Portal 2's layout, both portal buttons, back taps fire the
-  portal; the Settings page is Portal 2's.
+  portal; the Settings page is Portal 2's. Back taps were reported
+  unreliable on an iPhone 18 Pro (the thresholds were calibrated on an
+  iPhone 15 Pro Max): try Settings > Tap sensitivity.
 - **Not yet**: a full playthrough, later chambers (energy balls), performance
   measurements. A crash ending with `target not recompiled` is one more root
   to add: please report it with the log, `~/Library/Logs/PortalNatif.log`.
@@ -434,7 +438,7 @@ profiles.
 | Half-Life 2 | iPhone app: 60 fps on an iPhone 15 Pro Max in a first short test (`./setup.sh --game hl2 --ios`, [details](docs/hl2.md#iphone)) | 🚧 |
 | Half-Life 2 | The episodes and Lost Coast: first maps load and render, not played through | 🚧 |
 | Portal | Mac app from the same recompiler and checkout: first chamber played, six more load and run, later chambers untested | 🚧 |
-| Portal | iPhone app: installs, starts and renders in a short session (`./setup.sh --game portal1 --ios`, [details](docs/portal1.md#iphone)) | 🚧 |
+| Portal | iPhone app: played up to chamber 16 at 60 fps on an iPhone 18 Pro by a user ([#53](https://github.com/kanapitsas/source-recomp/issues/53)), short session only by us (`./setup.sh --game portal1 --ios`, [details](docs/portal1.md#iphone)) | 🚧 |
 | Rendering | Ray-traced lighting with Metal on M3 and A17 Pro GPUs, in the spirit of Portal with RTX (NVIDIA's RTX Remix is Windows and NVIDIA only, so it cannot be reused) | 💡 |
 
 ## Repository layout
