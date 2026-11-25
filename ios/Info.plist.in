@@ -24,6 +24,18 @@
     <key>UISupportedInterfaceOrientations</key>
     <array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
     <key>UILaunchScreen</key><dict/>
+    <!-- UIScene : requis par le SDK 27 (sans quoi l'iPhone Duo met l'app en mode de
+         compatibilité, bandes noires). Délégué : runtime/ios/scene_ios.m. -->
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key><false/>
+        <key>UISceneConfigurations</key>
+        <dict><key>UIWindowSceneSessionRoleApplication</key>
+        <array><dict>
+            <key>UISceneConfigurationName</key><string>Default</string>
+            <key>UISceneDelegateClassName</key><string>P2SceneDelegate</string>
+        </dict></array></dict>
+    </dict>
     <!-- Icône : fichiers AppIcon* tirés du jeu par tools/build_ios.py. -->
     <key>CFBundleIcons</key>
     <dict><key>CFBundlePrimaryIcon</key><dict><key>CFBundleIconFiles</key><array><string>AppIcon60x60</string></array></dict></dict>

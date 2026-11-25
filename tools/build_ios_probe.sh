@@ -26,11 +26,11 @@ eval "$VARS"
 APP="$IOS_DIR/probe.app"
 mkdir -p "$APP"
 xcrun --sdk $SDK clang -target $TRIPLE -isysroot "$(xcrun --sdk $SDK --show-sdk-path)" -O1 -DGLES_SILENCE_DEPRECATION \
-  -I"$DEPS/include/SDL2" -I"$DEPS/include/gl4es" ios/probe/probe.c ios/probe/clip_test.c \
+  -I"$DEPS/include/SDL2" -I"$DEPS/include/gl4es" ios/probe/probe.c ios/probe/clip_test.c runtime/ios/scene_ios.m -fobjc-arc -Iruntime/ios \
   "$DEPS/lib/libSDL2main.a" "$DEPS/lib/libSDL2.a" "$DEPS/lib/libgl4es.a" \
   $(for f in UIKit Foundation CoreGraphics QuartzCore OpenGLES Metal AVFoundation AudioToolbox CoreAudio CoreMotion \
              GameController CoreHaptics CoreBluetooth; do echo -framework $f; done) \
-  -Wl,-platform_version,$PLATFORM,17.0,18.0 -o "$APP/probe"
+  -o "$APP/probe"
 sed -e 's/@EXECUTABLE@/probe/' -e "s|@IDENTIFIER@|$PROBE_ID|" -e 's/@NAME@/P2 Probe/' -e 's/@GAME@/probe/' \
     -e "s/@PLATFORM@/$PLIST/" ios/Info.plist.in > "$APP/Info.plist"
 if [ "$TARGET" = sim ]; then codesign -s - -f "$APP" >/dev/null 2>&1; else python3 ios/signing/sign.py "$APP"; fi

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lifecycle_ios.h"
+#include "scene_ios.h"
 #include "settings.h"
 
 // Échelle points -> pixels. Sur simulateur (rendu OpenGL ES logiciel,
@@ -61,7 +62,12 @@ void rt_ios_game_state_poll(void);
 SDL_Window *rt_ios_create_window(const char *title, int x, int y, int w, int h, Uint32 flags) {
     if (rt_ios_render_scale() > 1) flags |= SDL_WINDOW_ALLOW_HIGHDPI;
     rt_ios_lifecycle_init();   // pause en arrière-plan (lifecycle_ios.m)
+    // SDK 27 : la fenêtre doit appartenir à la scène (scene_ios.m), sinon elle
+    // reste détachée (noire) et en portrait. SDL 2.30 crée l'UIWindow sans scène :
+    // on attend la scène avant, et on l'y rattache dès la création.
+    rt_ios_scene_wait(5);
     SDL_Window *window = SDL_CreateWindow(title, x, y, down(w), down(h), flags);
+    rt_ios_scene_adopt(window);
     rt_ios_touch_controls_attach(window);   // commandes tactiles (touch_controls.m)
     return window;
 }

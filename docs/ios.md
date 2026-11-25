@@ -135,6 +135,28 @@ Replace `YOURTEAMID` with your team ID (Xcode > Settings > Accounts, or the
 of the first Apple Development certificate in the keychain: with several Apple
 accounts in Xcode, set `P2_TEAM_ID` to the one you want.
 
+### SDK, UIScene and the iPhone Duo
+
+The app is linked against the current iOS SDK (27.1 or newer; `build_ios.py`
+refuses an older one). An app linked against an older SDK runs in
+compatibility mode on the iPhone Duo: the game sees a 667×375-point screen
+(1334×750 at the default Resolution) with black bars. Before this, the link
+declared SDK 18 to keep the classic UIKit lifecycle, because SDL2 2.30.9 knows
+nothing about UIScene, which the SDK 27 requires. Now:
+
+- `ios/Info.plist.in` declares a scene manifest whose delegate is
+  `P2SceneDelegate` (`runtime/ios/scene_ios.m`), which records the connected
+  `UIWindowScene`;
+- `rt_ios_create_window` (`runtime/ios/sdl_ios.m`) waits for the scene, lets
+  SDL create its window, then sets `windowScene` on the SDL `UIWindow`
+  (`rt_ios_scene_adopt`). Without a scene the window stays detached: black,
+  and in portrait. UIKit then sizes it to the scene. SDL itself is not patched.
+
+Checked in the iPhone Duo simulator (iOS 27.2) with a minimal SDL app: SDK 18
+gives 667×375 points, SDK 27.2 with the scene gives 678×466 points at 3×
+(1398×2034 pixels) and a full-screen window. The Duo has a second display
+(2007×2853 pixels); the app only uses the main one.
+
 Saves: `tools/ios_device.sh saves status|pull|push` copies them between the Mac
 and the iPhone over the cable ([details](usage.md#saves-between-mac-and-iphone-portal-2));
 Portal 2 only for now.
