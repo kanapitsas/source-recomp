@@ -52,18 +52,24 @@ static void record_scene(UIWindowScene *scene) {
     }
 }
 
-// Info.plist autorise le portrait pour le Duo : iOS y lance donc l'app si l'appareil est tenu
-// droit. Or le moteur choisit sa résolution au démarrage : sur un écran large lancé en
-// portrait il se retrouvait avec une surface de la mauvaise taille, et sur les autres écrans
-// la surface restait celle du portrait (jeu dans un coin). Le jeu naît donc toujours en
-// paysage (on le demande dès la connexion) ; sur le grand écran du Duo, le portrait est
-// rendu quand le moteur affiche ses premières images (release_portrait).
+// Info.plist autorise le portrait : iOS lance l'app dans l'orientation où il voit le téléphone
+// (la scène connectée avant main() en porte déjà le résultat). Sur les écrans ordinaires, l'app
+// est en paysage seulement : le moteur choisit sa résolution au démarrage, et une surface de
+// portrait laissait le jeu dans un coin ; on y demande le paysage dès la connexion. Sur le grand
+// écran du Duo, on garde le choix d'iOS (paysage, ou portrait coupé en deux) : la fenêtre du jeu
+// est mise à sa taille avant que le moteur ne crée sa surface (rt_ios_scene_adopt). On ne lit pas
+// UIDevice.orientation : c'est l'orientation du corps du téléphone, pas de l'écran intérieur, qui
+// annonce « portrait » dans la position large.
 // UIKit ne tourne une scène que si une fenêtre y porte un contrôleur qui le permet : tant que SDL
-// n'a pas créé la sienne, une fenêtre noire en paysage seulement tient la place.
+// n'a pas créé la sienne, une fenêtre noire tient la place (paysage seulement sauf grand écran).
+static BOOL bootstrap_allows_portrait;
 @interface P2LandscapeController : UIViewController
 @end
 @implementation P2LandscapeController
-- (UIInterfaceOrientationMask)supportedInterfaceOrientations { return UIInterfaceOrientationMaskLandscape; }
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    return bootstrap_allows_portrait ? UIInterfaceOrientationMaskLandscape | UIInterfaceOrientationMaskPortrait
+                                     : UIInterfaceOrientationMaskLandscape;
+}
 - (BOOL)prefersStatusBarHidden { return YES; }
 @end
 static UIWindow *bootstrap_window;
@@ -73,24 +79,7 @@ static void request_orientations(UIWindowScene *scene, UIInterfaceOrientationMas
         fprintf(stderr, "[ios] rotation refusée : %s\n", error.localizedDescription.UTF8String);
     }];
 }
-extern _Atomic unsigned long rt_ios_frames;   // gl_ios.m : images présentées
 void rt_ios_touch_controls_rehost(void);       // touch_controls.m
-static BOOL portrait_released;
-// Libère le portrait : une demande de rotation ponctuelle, seulement si le téléphone est déjà
-// tenu droit (la fenêtre noire du départ n'autorisait que le paysage, et l'orientation de l'appareil
-// n'ayant pas changé, rien ne ferait tourner l'écran). Tenu en paysage, on ne demande rien :
-// demander « paysage ou portrait » faisait basculer en portrait un téléphone tenu en paysage ;
-// la fenêtre de SDL autorise désormais le portrait, et l'écran tournera quand le téléphone le fera.
-static void release_portrait(void) {
-    static CFTimeInterval first_frames;
-    if (portrait_released || !connected || !wide_phone_display(connected) || atomic_load(&rt_ios_frames) < 30) return;
-    // Une rotation arrivant pendant l'initialisation du moteur est ignorée : quelques secondes de plus.
-    if (!first_frames) first_frames = CACurrentMediaTime();
-    if (CACurrentMediaTime() - first_frames < 5) return;
-    portrait_released = YES;
-    if (UIDevice.currentDevice.orientation == UIDeviceOrientationPortrait)
-        request_orientations(connected, UIInterfaceOrientationMaskPortrait);
-}
 
 // Délégué nommé par UISceneDelegateClassName (ios/Info.plist.in).
 @interface P2SceneDelegate : UIResponder <UIWindowSceneDelegate>
@@ -102,11 +91,12 @@ static void release_portrait(void) {
     connected = (UIWindowScene *)scene;
     record_scene(connected);
     [UIDevice.currentDevice beginGeneratingDeviceOrientationNotifications];
+    bootstrap_allows_portrait = wide_phone_display(connected);
     bootstrap_window = [[UIWindow alloc] initWithWindowScene:connected];
     bootstrap_window.rootViewController = [P2LandscapeController new];
     bootstrap_window.backgroundColor = UIColor.blackColor;
     [bootstrap_window makeKeyAndVisible];
-    request_orientations(connected, UIInterfaceOrientationMaskLandscape);
+    if (!bootstrap_allows_portrait) request_orientations(connected, UIInterfaceOrientationMaskLandscape);
     CGRect bounds = connected.coordinateSpace.bounds;
     fprintf(stderr, "[ios] scène connectée : %.0fx%.0f points, échelle %.2f\n", bounds.size.width, bounds.size.height,
             connected.screen.scale);
@@ -172,10 +162,10 @@ int rt_ios_scene_wait(double seconds) {
             CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.01, true);
         if (!connected) fprintf(stderr, "[ios] aucune scène connectée après %.0f s\n", seconds);
     }
-    // Le jeu ne naît qu'en paysage (voir request_orientations) : la scène, connectée avant même
-    // main(), peut encore être en portrait.
+    // Hors grand écran, le jeu ne naît qu'en paysage (voir request_orientations) : la scène,
+    // connectée avant même main(), peut encore être en portrait.
     static BOOL landscape_waited;
-    if (connected && !landscape_waited) {
+    if (connected && !landscape_waited && !wide_phone_display(connected)) {
         landscape_waited = YES;
         CFTimeInterval start = CACurrentMediaTime();
         while (connected.coordinateSpace.bounds.size.height > connected.coordinateSpace.bounds.size.width && CACurrentMediaTime() < start + 3)
@@ -207,6 +197,9 @@ void rt_ios_scene_adopt(SDL_Window *sdl_window) {
     tracked_window = window;
     bootstrap_window.hidden = YES;   // la fenêtre de SDL prend la place
     bootstrap_window = nil;
+    // Avant que le moteur ne crée sa surface : la fenêtre a déjà la taille de la zone du jeu (moitié
+    // haute en portrait coupé en deux) et la moitié basse porte déjà les commandes.
+    apply_layout();
 }
 
 // Moitié basse de l'écran en portrait : sa propre fenêtre, qui porte les commandes tactiles
@@ -225,7 +218,6 @@ static UIWindow *controls_window;
 // le grand écran ; ailleurs, fenêtre du jeu seule, à la taille de la scène.
 static void apply_layout(void) {
     if (!connected || !tracked_window) return;
-    release_portrait();
     CGRect bounds = connected.coordinateSpace.bounds, game = game_rect(connected);
     BOOL split = !CGRectEqualToRect(game, bounds);
     static CGRect last_bounds; static NSInteger last_orientation;

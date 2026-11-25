@@ -209,12 +209,16 @@ buttons as in landscape.
   axes laid out differently and a phone held crooked): if left and right are swapped for
   back taps in portrait, set `P2_BACKTAP_INVERT_PORTRAIT=1` and send the sensor log
   (`P2_BACKTAP_LOG=1`);
-- the game always starts in landscape: the engine picks its resolution at startup
-  and ended up with a wrong surface on a half-height window (and, on other phones,
-  in a corner after the rotation to landscape). A black landscape-only window holds
-  the scene until SDL creates its own, `rt_ios_scene_wait` waits for the rotation, and
-  on the Duo's inner display the scene is released into portrait once the engine has
-  been drawing for a few seconds, if the phone is held upright.
+- the app follows the orientation iOS gives the scene at launch (it knows how the phone is
+  held, including the Duo's inner display). On the inner display it keeps that choice:
+  landscape, or portrait split in two; the game window is set to the game's half
+  (`rt_ios_scene_adopt` calls `apply_layout`) before the engine creates its surface, so the
+  engine starts at the right size (669x475 in portrait). On other phones the app is
+  landscape-only: the scene is asked for landscape on connect, and `rt_ios_scene_wait` waits
+  for it, since a portrait surface left the game in a corner. The app never reads
+  `UIDevice.orientation` (the body's orientation, not the inner display's: held in the
+  Duo's wide position it says portrait, which rotated the game when a level loaded) and
+  never asks for portrait itself.
 
 Two more Duo details:
 
@@ -243,7 +247,7 @@ Checked with the game in the iPhone Duo simulator (iOS 27.2), on the inner displ
 (951×669 points) and the outer one (678×466): the menus, tapping, a level with the
 touch controls, leaving the app and coming back, and folding and unfolding
 mid-game; in portrait on the inner display: menus, pause from the bottom half,
-rotating back and forth, starting the app with the device already upright. The game
+rotating back and forth, starting the app and then rotating the phone. The game
 also starts full screen in landscape on an iPhone 16 Pro simulator (iOS 18.4).
 The Duo has two displays; the app follows the one it is on. Not checked: gyro
 aiming and back taps in portrait on a phone (synthetic tests only), the Metal renderer

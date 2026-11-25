@@ -347,6 +347,14 @@ typedef struct { long taps, fixes, reported; CGRect area; int fps, metal, lit; }
     // Capteurs de mouvement : orientation de l'écran lue une fois par image.
     BOOL playing = !menu && !concealed;   // menu vaut aussi pour l'app quittée
     int orient = rt_ios_backtap_available() || rt_ios_gyro_available() ? [self orientationSign] : 0;
+    {   // Diagnostic : ce que les capteurs voient, à chaque changement (les réglages Gyro et Tapes au dos).
+        static int last_orient = -99, last_playing = -1;
+        if (orient != last_orient || (int)playing != last_playing) {
+            last_orient = orient; last_playing = playing;
+            fprintf(stderr, "[ios] capteurs : orientation %d, en partie %d (menu %d, cachée %d), tapes au dos %s, gyroscope %s\n", orient,
+                    playing, menu, concealed, rt_ios_backtap_available() ? "oui" : "non", rt_ios_gyro_available() ? "oui" : "non");
+        }
+    }
     [self backTapStep:orient playing:playing now:now];
     [self gyroStep:orient playing:playing now:now];
     [self quickSaveStep:now];
