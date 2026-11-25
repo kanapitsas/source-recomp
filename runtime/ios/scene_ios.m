@@ -74,18 +74,22 @@ static void request_orientations(UIWindowScene *scene, UIInterfaceOrientationMas
     }];
 }
 extern _Atomic unsigned long rt_ios_frames;   // gl_ios.m : images présentées
+void rt_ios_touch_controls_rehost(void);       // touch_controls.m
 static BOOL portrait_released;
+// Libère le portrait : une demande de rotation ponctuelle, seulement si le téléphone est déjà
+// tenu droit (la fenêtre noire du départ n'autorisait que le paysage, et l'orientation de l'appareil
+// n'ayant pas changé, rien ne ferait tourner l'écran). Tenu en paysage, on ne demande rien :
+// demander « paysage ou portrait » faisait basculer en portrait un téléphone tenu en paysage ;
+// la fenêtre de SDL autorise désormais le portrait, et l'écran tournera quand le téléphone le fera.
 static void release_portrait(void) {
+    static CFTimeInterval first_frames;
     if (portrait_released || !connected || !wide_phone_display(connected) || atomic_load(&rt_ios_frames) < 30) return;
     // Une rotation arrivant pendant l'initialisation du moteur est ignorée : quelques secondes de plus.
-    static CFTimeInterval first_frames;
     if (!first_frames) first_frames = CACurrentMediaTime();
     if (CACurrentMediaTime() - first_frames < 5) return;
     portrait_released = YES;
-    // Appareil tenu droit : portrait ; sinon on laisse les deux (le prochain mouvement décidera).
-    BOOL upright = UIDevice.currentDevice.orientation == UIDeviceOrientationPortrait;
-    request_orientations(connected, upright ? UIInterfaceOrientationMaskPortrait
-                                            : UIInterfaceOrientationMaskLandscape | UIInterfaceOrientationMaskPortrait);
+    if (UIDevice.currentDevice.orientation == UIDeviceOrientationPortrait)
+        request_orientations(connected, UIInterfaceOrientationMaskPortrait);
 }
 
 // Délégué nommé par UISceneDelegateClassName (ios/Info.plist.in).
@@ -238,7 +242,7 @@ static void apply_layout(void) {
         tracked_window.frame = wanted;
         [tracked_window layoutIfNeeded];   // SDL envoie alors la taille de la vue (viewDidLayoutSubviews)
     }
-    if (!split) { controls_window.hidden = YES; return; }
+    if (!split) { controls_window.hidden = YES; rt_ios_touch_controls_rehost(); return; }
     CGRect below = CGRectMake(0, CGRectGetMaxY(game), bounds.size.width, bounds.size.height - CGRectGetMaxY(game));
     if (!controls_window) {
         controls_window = [[UIWindow alloc] initWithWindowScene:connected];
@@ -249,6 +253,8 @@ static void apply_layout(void) {
     if (controls_window.windowScene != connected) controls_window.windowScene = connected;
     if (!CGRectEqualToRect(controls_window.frame, below)) controls_window.frame = below;
     if (controls_window.hidden) controls_window.hidden = NO;   // sans devenir la fenêtre clé : les événements restent à SDL
+    [controls_window layoutIfNeeded];
+    rt_ios_touch_controls_rehost();
 }
 
 int rt_ios_scene_split(void) { return controls_window && !controls_window.hidden; }

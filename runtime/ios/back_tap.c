@@ -72,6 +72,7 @@ void rt_backtap_defaults(rt_backtap_params *p) {
     p->lateral_ratio = 0.7f;  // repli latéral seulement si y porte 70 % du pic
     p->lateral_sign = 1;
     p->invert = 0;
+    p->invert_portrait = 0;
     p->z_sign = 0;            // à fixer après calibration : dos et écran poussent en sens opposés
     p->refractory = 0.25f;    // 4 tapes/s au plus ; couvre les rebonds de la main
     p->touch_guard = 0.08f;   // ±80 ms autour d'un début ou d'une fin de toucher
@@ -108,6 +109,7 @@ void rt_backtap_params_from_env(rt_backtap_params *p) {
     p->lateral_sign = rt_backtap_env_sign("P2_BACKTAP_LATERAL", p->lateral_sign);
     p->z_sign = rt_backtap_env_sign("P2_BACKTAP_ZSIGN", p->z_sign);
     p->invert = rt_backtap_env_sign("P2_BACKTAP_INVERT", 0) > 0;
+    p->invert_portrait = rt_backtap_env_sign("P2_BACKTAP_INVERT_PORTRAIT", 0) > 0;
 }
 
 void rt_backtap_init(rt_backtap *d, const rt_backtap_params *p) {
@@ -207,7 +209,11 @@ static void judge(rt_backtap *d, int orient, int active, rt_backtap_report *r) {
 
     // Orientation : écran d'abord, gravité à défaut.
     r->orient = orient;
-    if (!r->orient && g_now && fabsf(g_now->g[0]) >= 0.3f) r->orient = g_now->g[0] > 0 ? 1 : -1;
+    if (!r->orient && g_now) {
+        if (fabsf(g_now->g[0]) >= 0.3f) r->orient = g_now->g[0] > 0 ? 1 : -1;
+        else if (g_now->g[1] <= -0.7f) r->orient = RT_BACKTAP_PORTRAIT;   // droit : la gravité tire vers -y
+    }
+    const int portrait = r->orient == RT_BACKTAP_PORTRAIT;
 
     // Côté, dans le repère de l'appareil (+1 : vers +y), puis de l'écran.
     // Rotation autour de x (couple de la poussée) pondérée par side_x_weight,
@@ -217,14 +223,40 @@ static void judge(rt_backtap *d, int orient, int active, rt_backtap_report *r) {
     // 79, 0,5 x + z 79 ; x seul se trompait sur les tapes près d'un coin.
     // Écarts maximaux : l'intégrale du premier lobe ou l'écart à la rotation
     // juste avant l'impact inversaient des séries entières.
-    r->side_score = p->side_x_weight * r->rot[0] - (float)r->orient * r->rot[2];
-    if (fabsf(r->side_score) >= p->rot_min) {
-        r->side = r->side_score > 0 ? 1 : -1; r->method = "rotation";
-    } else if (p->lateral_sign && r->peak > 0 && fabsf(r->acc[1]) >= p->lateral_ratio * r->peak) {
-        // Poussée physique vers +y (a_y CoreMotion < 0) : tape venue du côté -y.
-        r->side = (r->acc[1] > 0 ? 1 : -1) * p->lateral_sign; r->method = "latéral";
+    // Le côté se lit dans le plan de l'écran. La gravité projetée dans ce plan (xy) pointe vers le bord
+    // du bas de l'écran ; la droite en est le quart de tour (-gy, gx) autour de z. Le couple de la
+    // poussée tourne le téléphone autour de l'axe vertical de l'écran (r × F = (ry·F, -rx·F, 0)), et
+    // la main qui tape le fait aussi pivoter dans le plan de l'écran, dans le même sens quelle que
+    // soit l'orientation. Cela ne suppose rien sur la façon dont les axes de l'appareil sont posés
+    // par rapport à l'écran (iPhone Duo : paysage, portrait) ; quasi à plat, le bord du bas n'est
+    // plus défini : on retombe sur l'orientation de l'interface (y en paysage, signé ; x en portrait).
+    float plane = g_now ? hypotf(g_now->g[0], g_now->g[1]) : 0;
+    const int by_gravity = g_now && plane >= 0.35f * norm3(g_now->g) && norm3(g_now->g) > 0.3f;
+    float dx = 0, dy = 0;   // bord du bas de l'écran, dans le repère de l'appareil
+    if (by_gravity) { dx = g_now->g[0] / plane; dy = g_now->g[1] / plane; }
+    const float flip = (p->invert ? -1.0f : 1.0f) * (portrait && p->invert_portrait ? -1.0f : 1.0f);
+    if (by_gravity) {
+        // > 0 : vers la droite de l'écran.
+        r->side_score = p->side_x_weight * (r->rot[0] * dx + r->rot[1] * dy) - r->rot[2];
+        float along = r->acc[0] * -dy + r->acc[1] * dx;
+        if (fabsf(r->side_score) >= p->rot_min) {
+            r->side = r->side_score > 0 ? 1 : -1; r->method = "rotation";
+        } else if (p->lateral_sign && r->peak > 0 && fabsf(along) >= p->lateral_ratio * r->peak) {
+            // Poussée physique vers la droite (a CoreMotion < 0) : tape venue du côté gauche.
+            r->side = (along > 0 ? 1 : -1) * p->lateral_sign; r->method = "latéral";
+        }
+        r->side = (int)(r->side * flip);
+    } else {
+        const int axis = portrait ? 0 : 1;   // axe de l'appareil le long de l'horizontale de l'écran
+        r->side_score = portrait ? -p->side_x_weight * r->rot[1] - r->rot[2]
+                                 : p->side_x_weight * r->rot[0] - (float)r->orient * r->rot[2];
+        if (fabsf(r->side_score) >= p->rot_min) {
+            r->side = r->side_score > 0 ? 1 : -1; r->method = "rotation";
+        } else if (p->lateral_sign && r->peak > 0 && fabsf(r->acc[axis]) >= p->lateral_ratio * r->peak) {
+            r->side = (r->acc[axis] > 0 ? 1 : -1) * p->lateral_sign; r->method = "latéral";
+        }
+        r->side = (int)(r->side * (portrait ? 1 : r->orient) * flip);
     }
-    r->side *= r->orient * (p->invert ? -1 : 1);
 
     int by_accel = r->peak >= p->accel_min && r->jerk >= p->jerk_min;
     int by_gyro = r->peak >= p->gyro_accel_min && r->jerk >= p->jerk_min && fabsf(r->rot[0]) >= p->gyro_rot_min &&
@@ -244,7 +276,7 @@ static void judge(rt_backtap *d, int orient, int active, rt_backtap_report *r) {
     else if (g_now && g_now->g[2] < p->flat_z) r->reject = "téléphone à plat";
     else if (r->width > p->max_width) r->reject = "pic trop long";
     else if (p->z_sign && (onset_az > 0 ? 1 : -1) != p->z_sign) r->reject = "sens z";
-    else if (!r->orient) r->reject = "orientation inconnue";
+    else if (!by_gravity && !r->orient) r->reject = "orientation inconnue";
     else if (!r->side) r->reject = "côté indécis";
     if (r->reject) r->side = 0;
 }

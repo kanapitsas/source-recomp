@@ -310,6 +310,18 @@ typedef struct { long taps, fixes, reported; CGRect area; int fps, metal, lit; }
     if (any != concealed) { concealed = any; [self setNeedsRender]; }
 }
 
+// Change d'hôte (fenêtre de SDL ou moitié basse du portrait) sans attendre l'image suivante : le
+// moteur peut rester une seconde sur le changement de taille, et les commandes manquaient
+// pendant ce temps. Appelé par scene_ios.m dès que la disposition des fenêtres change.
+- (void)rehost {
+    UIView *target = (__bridge UIView *)rt_ios_scene_controls_view() ?: sdlHost;
+    if (!target) return;
+    if (self.superview != target) { [target addSubview:self]; [self invalidateLayout]; }
+    BOOL split = target != sdlHost;
+    if (split != splitLayout) { splitLayout = split; [self invalidateLayout]; [self releaseAll]; }
+    if (!CGRectEqualToRect(self.frame, target.bounds)) { self.frame = target.bounds; [self invalidateLayout]; }
+    [self renderIfNeeded];
+}
 // À chaque image : rester devant la vue OpenGL de SDL (ajoutée après la
 // fenêtre), suivre la taille de la fenêtre, tourner la caméra.
 - (void)step {
@@ -353,10 +365,12 @@ typedef struct { long taps, fixes, reported; CGRect area; int fps, metal, lit; }
         [self lookBy:(float)(x * fabs(x)) * scale y:(float)(-y * fabs(y)) * scale];
     }
 }
-// +1 : axe y de l'appareil vers la droite de l'écran ; -1 : vers la gauche ; 0 : portrait.
+// +1 : axe y de l'appareil vers la droite de l'écran ; -1 : vers la gauche ;
+// RT_BACKTAP_PORTRAIT : téléphone droit (axe x vers la droite) ; 0 : autre (tête en bas).
 - (int)orientationSign {
     UIInterfaceOrientation o = self.window.windowScene.interfaceOrientation;
-    return o == UIInterfaceOrientationLandscapeLeft ? 1 : o == UIInterfaceOrientationLandscapeRight ? -1 : 0;
+    return o == UIInterfaceOrientationLandscapeLeft ? 1 : o == UIInterfaceOrientationLandscapeRight ? -1
+         : o == UIInterfaceOrientationPortrait ? RT_BACKTAP_PORTRAIT : 0;
 }
 // Mouvement de souris relatif, fractions de comptes reportées.
 - (void)lookBy:(float)x y:(float)y {
@@ -600,7 +614,7 @@ static UIImage *icon_image(NSString *symbol, CGFloat point_size) {
     int n = 0;
     for (int i = 0; i < count && n < MAX_BUTTONS; ++i) {
         const rt_touch_button *t = &layout[i];
-        if ((t->flags & RT_TOUCH_PORTAL) && !portal_buttons() && !splitLayout) continue;
+        if ((t->flags & RT_TOUCH_PORTAL) && !portal_buttons()) continue;
         if ((t->flags & RT_TOUCH_DATASET) && !rt_ios_backtap_dataset_on()) continue;
         double cx, cy;
         rt_touch_place(t, CGRectGetMinX(a), CGRectGetMinY(a), a.size.width, a.size.height, &cx, &cy);
@@ -1003,6 +1017,9 @@ static void set_circle(CAShapeLayer *l, CGFloat diameter) {
 static P2TouchControls *controls;
 
 // Appelé à la création de la fenêtre du jeu (sdl_ios.m), sur le thread principal.
+void rt_ios_touch_controls_rehost(void) {
+    if (controls && [NSThread isMainThread]) [controls rehost];
+}
 void rt_ios_touch_controls_attach(SDL_Window *window) {
     if (controls || !window || !rt_ios_env_flag("P2_TOUCH_CONTROLS", 1)) return;
     SDL_SysWMinfo info;

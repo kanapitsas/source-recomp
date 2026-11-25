@@ -4,6 +4,7 @@
 // les capteurs, leur dit l'orientation et l'état de la partie, et clique la
 // tape acceptée. En-tête C : rien d'UIKit.
 #pragma once
+#include "back_tap.h"   // RT_BACKTAP_PORTRAIT
 
 // Démarre les capteurs (thread principal). Sans capteur (simulateur) ou avec
 // P2_BACKTAP=0 : rien, et rt_ios_backtap_available rend 0.
@@ -11,7 +12,7 @@ void rt_ios_backtap_start(void);
 int rt_ios_backtap_available(void);
 // Capteurs en marche ou arrêtés (thread principal) ; mêmes réglages à la reprise.
 void rt_ios_backtap_run(int on);
-// Orientation de l'écran (+1 : axe y de l'appareil vers la droite, -1, 0) et
+// Orientation de l'écran (+1 : axe y de l'appareil vers la droite, -1, RT_BACKTAP_PORTRAIT, 0) et
 // « en partie » (surcouche affichée, pas de menu), lus par la file des capteurs.
 void rt_ios_backtap_set_state(int orient, int playing);
 // Tape acceptée depuis le dernier appel : -1 gauche, +1 droite, 0 aucune.
