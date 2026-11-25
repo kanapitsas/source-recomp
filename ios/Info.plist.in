@@ -22,7 +22,10 @@
     <key>CADisableMinimumFrameDurationOnPhone</key><true/>
     <key>UIStatusBarHidden</key><true/>
     <key>UISupportedInterfaceOrientations</key>
-    <array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
+    <!-- Portrait : seulement pour le grand écran de l'iPhone Duo (jeu en haut, commandes en
+         bas) ; runtime/ios/scene_ios.m le retire de ce que SDL accepte partout ailleurs. -->
+    <array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string>
+           <string>UIInterfaceOrientationPortrait</string></array>
     <key>UILaunchScreen</key><dict/>
     <!-- UIScene : requis par le SDK 27 (sans quoi l'iPhone Duo met l'app en mode de
          compatibilité, bandes noires). Délégué : runtime/ios/scene_ios.m. -->

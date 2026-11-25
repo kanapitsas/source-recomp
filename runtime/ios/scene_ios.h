@@ -24,3 +24,9 @@ void rt_ios_scene_ignore_screen_changes(void);
 // le jeu se retrouvait rogné ou dans un coin), force une mise en page : SDL renvoie alors
 // l'événement de redimensionnement avec la vraie taille. Peu coûteux si rien ne change.
 void rt_ios_scene_resync(SDL_Window *sdl_window);
+// Thread principal. En portrait sur le grand écran de l'iPhone Duo, le jeu occupe la moitié
+// haute de l'écran et une seconde fenêtre la moitié basse, pour les commandes tactiles :
+// rt_ios_scene_split() dit si c'est le cas, rt_ios_scene_controls_view() rend alors la vue
+// (UIView *) de cette seconde fenêtre, sinon NULL.
+int rt_ios_scene_split(void);
+void *rt_ios_scene_controls_view(void);

@@ -8,6 +8,8 @@
 #include <math.h>
 #include <stdatomic.h>
 #include <stdio.h>
+#include <string.h>
+#include "env_ios.h"
 #include "scene_ios.h"
 
 // La scène elle-même n'est touchée que par le thread principal ; ce que les autres
@@ -16,14 +18,74 @@ static UIWindowScene *connected;
 static _Atomic int scene_w, scene_h;   // taille de l'écran de la scène (paysage), 0 sans scène
 static _Atomic int scene_orientation;  // UIInterfaceOrientation de la scène
 static UIWindow *tracked_window;       // fenêtre du jeu (thread principal)
+static void apply_layout(void);
 static _Atomic int waited;             // l'attente de la scène n'a lieu qu'une fois
 
-static void record_scene(UIWindowScene *scene) {
-    // App en paysage seulement : largeur = le plus grand côté.
+// Grand écran d'un téléphone (inférieur de l'iPhone Duo : 669 pt de côté court, contre 440 au
+// plus pour les autres iPhone) : le jeu y tient en portrait dans la moitié haute, les
+// commandes dans la moitié basse, comme une console à deux écrans. P2_PORTRAIT_SPLIT=0 : jamais.
+static BOOL wide_phone_display(UIWindowScene *scene) {
     CGSize size = scene.coordinateSpace.bounds.size;
+    return UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone && fmin(size.width, size.height) >= 500
+        && rt_ios_env_flag("P2_PORTRAIT_SPLIT", 1);
+}
+// Zone du jeu dans la scène : toute la scène, ou la moitié haute en portrait sur ce grand écran.
+static CGRect game_rect(UIWindowScene *scene) {
+    CGRect bounds = scene.coordinateSpace.bounds;
+    if (bounds.size.height > bounds.size.width && wide_phone_display(scene)) bounds.size.height = floor(bounds.size.height / 2);
+    return bounds;
+}
+
+static void record_scene(UIWindowScene *scene) {
+    // La fenêtre du jeu est toujours plus large que haute : largeur = le plus grand côté.
+    CGSize size = game_rect(scene).size;
     atomic_store(&scene_w, (int)lround(fmax(size.width, size.height)));
     atomic_store(&scene_h, (int)lround(fmin(size.width, size.height)));
     atomic_store(&scene_orientation, (int)scene.interfaceOrientation);
+    // SDL tire les orientations permises de ce réglage chaque fois qu'UIKit les demande
+    // (Info.plist y ajoute le portrait pour le Duo seulement).
+    const char *wanted = wide_phone_display(scene) ? "LandscapeLeft LandscapeRight Portrait" : "LandscapeLeft LandscapeRight";
+    const char *current = SDL_GetHint(SDL_HINT_ORIENTATIONS);
+    if (!current || strcmp(current, wanted)) {
+        SDL_SetHint(SDL_HINT_ORIENTATIONS, wanted);
+        [tracked_window.rootViewController setNeedsUpdateOfSupportedInterfaceOrientations];
+    }
+}
+
+// Info.plist autorise le portrait pour le Duo : iOS y lance donc l'app si l'appareil est tenu
+// droit. Or le moteur choisit sa résolution au démarrage : sur un écran large lancé en
+// portrait il se retrouvait avec une surface de la mauvaise taille, et sur les autres écrans
+// la surface restait celle du portrait (jeu dans un coin). Le jeu naît donc toujours en
+// paysage (on le demande dès la connexion) ; sur le grand écran du Duo, le portrait est
+// rendu quand le moteur affiche ses premières images (release_portrait).
+// UIKit ne tourne une scène que si une fenêtre y porte un contrôleur qui le permet : tant que SDL
+// n'a pas créé la sienne, une fenêtre noire en paysage seulement tient la place.
+@interface P2LandscapeController : UIViewController
+@end
+@implementation P2LandscapeController
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations { return UIInterfaceOrientationMaskLandscape; }
+- (BOOL)prefersStatusBarHidden { return YES; }
+@end
+static UIWindow *bootstrap_window;
+static void request_orientations(UIWindowScene *scene, UIInterfaceOrientationMask mask) {
+    UIWindowSceneGeometryPreferencesIOS *preferences = [[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:mask];
+    [scene requestGeometryUpdateWithPreferences:preferences errorHandler:^(NSError *error) {
+        fprintf(stderr, "[ios] rotation refusée : %s\n", error.localizedDescription.UTF8String);
+    }];
+}
+extern _Atomic unsigned long rt_ios_frames;   // gl_ios.m : images présentées
+static BOOL portrait_released;
+static void release_portrait(void) {
+    if (portrait_released || !connected || !wide_phone_display(connected) || atomic_load(&rt_ios_frames) < 30) return;
+    // Une rotation arrivant pendant l'initialisation du moteur est ignorée : quelques secondes de plus.
+    static CFTimeInterval first_frames;
+    if (!first_frames) first_frames = CACurrentMediaTime();
+    if (CACurrentMediaTime() - first_frames < 5) return;
+    portrait_released = YES;
+    // Appareil tenu droit : portrait ; sinon on laisse les deux (le prochain mouvement décidera).
+    BOOL upright = UIDevice.currentDevice.orientation == UIDeviceOrientationPortrait;
+    request_orientations(connected, upright ? UIInterfaceOrientationMaskPortrait
+                                            : UIInterfaceOrientationMaskLandscape | UIInterfaceOrientationMaskPortrait);
 }
 
 // Délégué nommé par UISceneDelegateClassName (ios/Info.plist.in).
@@ -35,6 +97,12 @@ static void record_scene(UIWindowScene *scene) {
     if (![scene isKindOfClass:UIWindowScene.class]) return;
     connected = (UIWindowScene *)scene;
     record_scene(connected);
+    [UIDevice.currentDevice beginGeneratingDeviceOrientationNotifications];
+    bootstrap_window = [[UIWindow alloc] initWithWindowScene:connected];
+    bootstrap_window.rootViewController = [P2LandscapeController new];
+    bootstrap_window.backgroundColor = UIColor.blackColor;
+    [bootstrap_window makeKeyAndVisible];
+    request_orientations(connected, UIInterfaceOrientationMaskLandscape);
     CGRect bounds = connected.coordinateSpace.bounds;
     fprintf(stderr, "[ios] scène connectée : %.0fx%.0f points, échelle %.2f\n", bounds.size.width, bounds.size.height,
             connected.screen.scale);
@@ -43,7 +111,9 @@ static void record_scene(UIWindowScene *scene) {
 - (void)windowScene:(UIWindowScene *)windowScene didUpdateCoordinateSpace:(id<UICoordinateSpace>)previousCoordinateSpace
     interfaceOrientation:(UIInterfaceOrientation)previousInterfaceOrientation traitCollection:(UITraitCollection *)previousTraitCollection {
     (void)previousCoordinateSpace; (void)previousInterfaceOrientation; (void)previousTraitCollection;
-    if (windowScene == connected) record_scene(connected);
+    if (windowScene != connected) return;
+    record_scene(connected);
+    apply_layout();
 }
 - (void)sceneDidDisconnect:(UIScene *)scene {
     if (scene != connected) return;
@@ -68,6 +138,11 @@ static void record_scene(UIWindowScene *scene) {
 static CGRect (*original_screen_bounds)(id, SEL);
 
 __attribute__((constructor)) static void install_screen_overrides(void) {
+    // Le moteur demande la saisie de texte (SDL_StartTextInput) : SDL ouvre alors le clavier à
+    // l'écran, que rien dans les commandes tactiles ne permet de refermer (sur le Duo, plié puis
+    // déplié, il recouvrait la moitié du jeu). Les touches d'un clavier matériel passent toujours ;
+    // P2_SCREEN_KEYBOARD=1 rend le clavier à l'écran.
+    if (!rt_ios_env_flag("P2_SCREEN_KEYBOARD", 0)) SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD, "0");
     Method orientation = class_getInstanceMethod(UIApplication.class, @selector(statusBarOrientation));
     if (orientation)
         method_setImplementation(orientation, imp_implementationWithBlock(^UIInterfaceOrientation(UIApplication *application) {
@@ -86,11 +161,24 @@ __attribute__((constructor)) static void install_screen_overrides(void) {
 }
 
 int rt_ios_scene_wait(double seconds) {
-    if (!atomic_load(&scene_w) && [NSThread isMainThread] && !atomic_exchange(&waited, 1)) {
+    if (![NSThread isMainThread]) return atomic_load(&scene_w) != 0;
+    if (!connected && !atomic_exchange(&waited, 1)) {
         CFTimeInterval deadline = CACurrentMediaTime() + seconds;
         while (!connected && CACurrentMediaTime() < deadline)
             CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.01, true);
         if (!connected) fprintf(stderr, "[ios] aucune scène connectée après %.0f s\n", seconds);
+    }
+    // Le jeu ne naît qu'en paysage (voir request_orientations) : la scène, connectée avant même
+    // main(), peut encore être en portrait.
+    static BOOL landscape_waited;
+    if (connected && !landscape_waited) {
+        landscape_waited = YES;
+        CFTimeInterval start = CACurrentMediaTime();
+        while (connected.coordinateSpace.bounds.size.height > connected.coordinateSpace.bounds.size.width && CACurrentMediaTime() < start + 3)
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.01, true);
+        CGSize size = connected.coordinateSpace.bounds.size;
+        fprintf(stderr, "[ios] scène en paysage : %.0fx%.0f après %.2f s\n", size.width, size.height, CACurrentMediaTime() - start);
+        record_scene(connected);   // le délégué n'a peut-être pas encore vu la rotation
     }
     return atomic_load(&scene_w) != 0;
 }
@@ -113,11 +201,63 @@ void rt_ios_scene_adopt(SDL_Window *sdl_window) {
     UIWindow *window = info.info.uikit.window;
     if (window && !window.windowScene && connected) window.windowScene = connected;
     tracked_window = window;
+    bootstrap_window.hidden = YES;   // la fenêtre de SDL prend la place
+    bootstrap_window = nil;
 }
+
+// Moitié basse de l'écran en portrait : sa propre fenêtre, qui porte les commandes tactiles
+// (celle de SDL ne couvre que la moitié haute). Elle suit les orientations de celle du jeu.
+@interface P2ControlsController : UIViewController
+@end
+@implementation P2ControlsController
+- (UIViewController *)game { return tracked_window.rootViewController; }
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations { return self.game.supportedInterfaceOrientations; }
+- (BOOL)prefersStatusBarHidden { return YES; }
+- (BOOL)prefersHomeIndicatorAutoHidden { return self.game.prefersHomeIndicatorAutoHidden; }
+@end
+static UIWindow *controls_window;
+
+// Thread principal : fenêtre du jeu en haut et fenêtre des commandes en bas en portrait sur
+// le grand écran ; ailleurs, fenêtre du jeu seule, à la taille de la scène.
+static void apply_layout(void) {
+    if (!connected || !tracked_window) return;
+    release_portrait();
+    CGRect bounds = connected.coordinateSpace.bounds, game = game_rect(connected);
+    BOOL split = !CGRectEqualToRect(game, bounds);
+    static CGRect last_bounds; static NSInteger last_orientation;
+    if (!CGRectEqualToRect(last_bounds, bounds) || last_orientation != connected.interfaceOrientation) {
+        last_bounds = bounds; last_orientation = connected.interfaceOrientation;
+        fprintf(stderr, "[ios] scène %.0fx%.0f orientation %ld, jeu %.0fx%.0f, coupé %d, fenêtre %.0fx%.0f\n", bounds.size.width, bounds.size.height,
+                (long)last_orientation, game.size.width, game.size.height, split, tracked_window.frame.size.width, tracked_window.frame.size.height);
+    }
+    // La fenêtre suit toujours la zone du jeu : UIKit ne la redimensionne pas toujours lui-même
+    // (lancé replié sur le Duo, puis déplié, le jeu restait dans le coin à la taille de l'écran
+    // extérieur).
+    CGRect wanted = split ? game : bounds;
+    if (!CGRectEqualToRect(tracked_window.frame, wanted)) {
+        tracked_window.frame = wanted;
+        [tracked_window layoutIfNeeded];   // SDL envoie alors la taille de la vue (viewDidLayoutSubviews)
+    }
+    if (!split) { controls_window.hidden = YES; return; }
+    CGRect below = CGRectMake(0, CGRectGetMaxY(game), bounds.size.width, bounds.size.height - CGRectGetMaxY(game));
+    if (!controls_window) {
+        controls_window = [[UIWindow alloc] initWithWindowScene:connected];
+        controls_window.rootViewController = [P2ControlsController new];
+        controls_window.rootViewController.view.backgroundColor = UIColor.blackColor;
+        controls_window.backgroundColor = UIColor.blackColor;
+    }
+    if (controls_window.windowScene != connected) controls_window.windowScene = connected;
+    if (!CGRectEqualToRect(controls_window.frame, below)) controls_window.frame = below;
+    if (controls_window.hidden) controls_window.hidden = NO;   // sans devenir la fenêtre clé : les événements restent à SDL
+}
+
+int rt_ios_scene_split(void) { return controls_window && !controls_window.hidden; }
+void *rt_ios_scene_controls_view(void) { return rt_ios_scene_split() ? (__bridge void *)controls_window.rootViewController.view : NULL; }
 
 void rt_ios_scene_resync(SDL_Window *sdl_window) {
     UIView *view = tracked_window.rootViewController.view;
     if (!sdl_window || !view || ![NSThread isMainThread]) return;
+    apply_layout();
     int w = 0, h = 0;
     SDL_GetWindowSize(sdl_window, &w, &h);
     CGSize size = view.bounds.size;   // mêmes troncatures que viewDidLayoutSubviews de SDL

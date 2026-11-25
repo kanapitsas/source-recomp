@@ -178,6 +178,50 @@ Folding or unfolding the Duo while the game runs is handled too:
   `rt_ios_scene_resync`, which forces a layout pass whenever SDL's window size and
   its view's size differ, so SDL sends the real size again.
 
+Portrait on the Duo's inner display works like a two-screen console: the game takes
+the top half of the screen and the touch controls the bottom half, with the same
+buttons as in landscape.
+
+- `Info.plist.in` allows portrait, but SDL only accepts it on a phone display whose
+  short side is at least 500 points (the inner display: 669; other iPhones: 440 at
+  most), through `SDL_HINT_ORIENTATIONS` kept up to date by `scene_ios.m` as the
+  Duo folds and unfolds. `P2_PORTRAIT_SPLIT=0` turns the split off;
+- in portrait, `apply_layout` (`scene_ios.m`, run from `rt_ios_scene_resync`) shrinks
+  the SDL `UIWindow` to the top half (669×475) and puts a second `UIWindow` on the
+  bottom half. `mainScreen.bounds` is the game's half too, so SDL and the engine see a
+  landscape-shaped display of that size and the rotation reaches the engine as an
+  ordinary resize event;
+- the touch controls move into that second window (`rt_ios_scene_controls_view`).
+  Their area has no top inset (it is the middle of the screen) and 20 pt on the
+  sides; both sticks rest 5 % of the width further in than in landscape
+  (`rt_touch_stick_rest`). Back-tap and gyro aiming are off in portrait, since their direction
+  depends on a landscape orientation, so the portal buttons are shown instead;
+- the game always starts in landscape: the engine picks its resolution at startup
+  and ended up with a wrong surface on a half-height window (and, on other phones,
+  in a corner after the rotation to landscape). A black landscape-only window holds
+  the scene until SDL creates its own, `rt_ios_scene_wait` waits for the rotation, and
+  on the Duo's inner display the scene is released into portrait once the engine has
+  been drawing for a few seconds, if the phone is held upright.
+
+Two more Duo details:
+
+- the engine runs fullscreen at the desktop display mode SDL gave it at launch and
+  does not follow later window resizes, so when the window no longer has that size
+  (the top half in portrait, or an inner display opened after a launch on the outer
+  one) its mouse coordinates were off by the ratio: taps on the menus landed beside
+  the buttons. `rt_ios_poll_event`, `rt_ios_get_mouse_state` and
+  `rt_ios_warp_mouse_in_window` (`sdl_ios.m`) now scale by desktop mode ÷ window
+  size (1 when they match, so other devices are unchanged);
+
+- the on-screen keyboard is off (`SDL_HINT_ENABLE_SCREEN_KEYBOARD=0`;
+  `P2_SCREEN_KEYBOARD=1` brings it back). The engine asks for text input and SDL
+  then raised the keyboard, which nothing in the touch controls can dismiss: after
+  starting the app folded and unfolding it, it covered the bottom half of the game.
+  Hardware keyboards are not affected;
+- `apply_layout` always sets the game window to the scene's size (or the top half in
+  portrait). UIKit does not always resize it itself: started folded and then
+  unfolded, the game stayed in a corner at the outer display's size.
+
 The touch controls log the safe-area insets the device reports (`[ios] zone sûre
 …`). The simulator's Duo reports 0 on the sides and top and 34 pt at the bottom
 on the inner display, and 84 pt on the right of the outer display (the camera).
@@ -185,10 +229,12 @@ on the inner display, and 84 pt on the right of the outer display (the camera).
 Checked with the game in the iPhone Duo simulator (iOS 27.2), on the inner display
 (951×669 points) and the outer one (678×466): the menus, tapping, a level with the
 touch controls, leaving the app and coming back, and folding and unfolding
-mid-game. Also with a minimal SDL app on an iPhone 16 Pro simulator (iOS 18.4).
+mid-game; in portrait on the inner display: menus, pause from the bottom half,
+rotating back and forth, starting the app with the device already upright. The game
+also starts full screen in landscape on an iPhone 16 Pro simulator (iOS 18.4).
 The Duo has two displays; the app follows the one it is on. Not checked: gyro
-aiming (its direction depends on the interface orientation) and the Metal renderer
-on the Duo.
+aiming (its direction depends on the interface orientation), the Metal renderer on
+the Duo, how the portrait layout feels in the hand, and the half-open pose.
 
 Saves: `tools/ios_device.sh saves status|pull|push` copies them between the Mac
 and the iPhone over the cable ([details](usage.md#saves-between-mac-and-iphone-portal-2));

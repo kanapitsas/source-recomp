@@ -31,10 +31,12 @@ RT_CHECK(ios_game_profile_from_plist_key) {
 // sur les appareils à coins arrondis (28 sur les côtés, 20 en haut ; le bas garde
 // sa barre d'accueil) : iPhone SE (coins droits, inchangé), iPhone 15 Pro Max, iPad 11",
 // iPhone Duo (petit écran 678×466, grand écran 951×669 : zone sûre nulle en haut et
-// sur les côtés, 34 pt de barre d'accueil en bas).
+// sur les côtés, 34 pt de barre d'accueil en bas), et sa moitié basse en portrait
+// (669×476, commandes tactiles sous le jeu : 20 pt sur les côtés, rien en haut, où
+// il n'y a pas de coin).
 static const struct { double x, y, w, h; } areas[] = {
     {0, 0, 667, 375}, {59, 20, 932 - 118, 430 - 20 - 21}, {28, 20, 1194 - 56, 834 - 20 - 20},
-    {28, 20, 678 - 56, 466 - 20 - 34}, {28, 20, 951 - 56, 669 - 20 - 34}};
+    {28, 20, 678 - 56, 466 - 20 - 34}, {28, 20, 951 - 56, 669 - 20 - 34}, {20, 0, 669 - 40, 476 - 34}};
 
 RT_CHECK(ios_touch_layout_fits_the_screen) {
     for (int layout = RT_IOS_LAYOUT_PORTAL2; layout <= RT_IOS_LAYOUT_HL2; ++layout) {
@@ -47,8 +49,9 @@ RT_CHECK(ios_touch_layout_fits_the_screen) {
             // un toucher y bascule le compteur avant tout bouton.
             double corner_w = x + 8 + (7 * 6 - 1) * 2 + 8 + 20, corner_h = y + 8 + 16 * 2 + 8 + 20;
             // Stick gauche au repos (restingStick: et stickRadius de touch_controls.m).
-            double stick_x = x + w * .16, stick_y = y + h * .72, stick_r = fmin(66, h * .15);
-            double look_x = x + w * rt_touch_look_rest((rt_ios_layout)layout);
+            int split = a == sizeof(areas) / sizeof(*areas) - 1;   // la dernière zone est la moitié basse du portrait
+            double stick_x = x + w * rt_touch_stick_rest((rt_ios_layout)layout, 0, split), stick_y = y + h * .72, stick_r = fmin(66, h * .15);
+            double look_x = x + w * rt_touch_stick_rest((rt_ios_layout)layout, 1, split);
             for (int i = 0; i < n; ++i) {
                 double cx, cy, r = b[i].size / 2;
                 rt_touch_place(&b[i], x, y, w, h, &cx, &cy);

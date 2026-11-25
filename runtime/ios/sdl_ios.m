@@ -49,6 +49,22 @@ void rt_ios_render_size(int *w, int *h) {
     *h = up((int)fmin(size.width, size.height));
 }
 static int down(int v) { return (int)lroundf((float)v / rt_ios_render_scale()); }
+// Le moteur tourne en plein écran à la taille du mode d'affichage de bureau que SDL lui a donné au
+// lancement (il ne reprend pas les changements de taille de la fenêtre). Quand la fenêtre n'a plus
+// cette taille (moitié haute du portrait sur le Duo, écran déplié après un lancement replié), les
+// positions de souris doivent être ramenées à ce que le moteur croit : sans cela, les touchers
+// tombaient à côté des boutons des menus. 1 quand la fenêtre a la taille du mode.
+static SDL_Window *game_window;   // pour rt_ios_scene_resync
+static void engine_ratio(double *rx, double *ry) {
+    *rx = *ry = 1;
+    SDL_DisplayMode mode;
+    int w = 0, h = 0;
+    if (!game_window || SDL_GetDesktopDisplayMode(0, &mode) || mode.w <= 0 || mode.h <= 0) return;
+    SDL_GetWindowSize(game_window, &w, &h);
+    if (w > 0 && h > 0) { *rx = (double)mode.w / w; *ry = (double)mode.h / h; }
+}
+static int up_by(int v, double ratio) { return (int)lround(v * (double)rt_ios_render_scale() * ratio); }
+static int down_by(int v, double ratio) { return (int)lround(v / (double)rt_ios_render_scale() / ratio); }
 void rt_ios_view_set_scale(void *uiview, float wanted) {
     UIView *view = (__bridge UIView *)uiview;
     if (!view || fabs(view.contentScaleFactor - wanted) <= 0.01) return;
@@ -59,7 +75,6 @@ void rt_ios_view_set_scale(void *uiview, float wanted) {
 
 void rt_ios_touch_controls_attach(SDL_Window *window);
 void rt_ios_game_state_poll(void);
-static SDL_Window *game_window;   // pour rt_ios_scene_resync
 SDL_Window *rt_ios_create_window(const char *title, int x, int y, int w, int h, Uint32 flags) {
     if (rt_ios_render_scale() > 1) flags |= SDL_WINDOW_ALLOW_HIGHDPI;
     rt_ios_lifecycle_init();   // pause en arrière-plan (lifecycle_ios.m)
@@ -104,11 +119,17 @@ int rt_ios_get_display_bounds(int display, SDL_Rect *rect) {
 Uint32 rt_ios_get_mouse_state(int *x, int *y) {
     int px = 0, py = 0;
     Uint32 buttons = SDL_GetMouseState(&px, &py);
-    if (x) *x = up(px);
-    if (y) *y = up(py);
+    double rx, ry;
+    engine_ratio(&rx, &ry);
+    if (x) *x = up_by(px, rx);
+    if (y) *y = up_by(py, ry);
     return buttons;
 }
-void rt_ios_warp_mouse_in_window(SDL_Window *window, int x, int y) { SDL_WarpMouseInWindow(window, down(x), down(y)); }
+void rt_ios_warp_mouse_in_window(SDL_Window *window, int x, int y) {
+    double rx, ry;
+    engine_ratio(&rx, &ry);
+    SDL_WarpMouseInWindow(window, down_by(x, rx), down_by(y, ry));
+}
 
 // Positions absolues et tailles de fenêtre en pixels ; les déplacements
 // relatifs (visée) gardent leur échelle, pour ne pas tripler la sensibilité.
@@ -117,11 +138,14 @@ int rt_ios_poll_event(SDL_Event *event) {
     rt_ios_scene_resync(game_window);   // taille de la fenêtre SDL = celle de sa vue (scene_ios.m)
     rt_ios_game_state_poll();   // menus/chargement ou partie (game_state.c), pour les commandes tactiles
     int got = SDL_PollEvent(event);
-    if (!got || !event || rt_ios_render_scale() <= 1) return got;
+    if (!got || !event) return got;
+    double rx, ry;
+    engine_ratio(&rx, &ry);
+    if (rt_ios_render_scale() <= 1 && rx == 1 && ry == 1) return got;
     switch (event->type) {
-    case SDL_MOUSEMOTION: event->motion.x = up(event->motion.x); event->motion.y = up(event->motion.y); break;
+    case SDL_MOUSEMOTION: event->motion.x = up_by(event->motion.x, rx); event->motion.y = up_by(event->motion.y, ry); break;
     case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP:
-        event->button.x = up(event->button.x); event->button.y = up(event->button.y); break;
+        event->button.x = up_by(event->button.x, rx); event->button.y = up_by(event->button.y, ry); break;
     case SDL_WINDOWEVENT:
         if (event->window.event == SDL_WINDOWEVENT_RESIZED || event->window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
             event->window.data1 = up(event->window.data1); event->window.data2 = up(event->window.data2);
