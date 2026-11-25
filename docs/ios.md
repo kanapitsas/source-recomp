@@ -165,11 +165,30 @@ because SDL2 2.30.9 knows nothing about UIScene, which SDK 27 requires. Now:
   size on other devices), and `ios/main_ios.c` waits for the scene before SDL
   reads the screen.
 
-Checked with the game in the iPhone Duo simulator (iOS 27.2), on the inner
-display (951×669 points) and the outer one (678×466), including leaving the app
-and coming back, and with a minimal SDL app on an iPhone 16 Pro simulator
-(iOS 18.4). The Duo has two displays; the app follows the one it is on at launch.
-Folding or unfolding while the game runs is not handled.
+Folding or unfolding the Duo while the game runs is handled too:
+
+- folding disconnects a `UIScreen`, and SDL's `SDL_DisplayWatch` crashed in
+  `UIKit_DelDisplay` handling it. The app only uses one display, so
+  `rt_ios_create_window` removes SDL's screen connect/disconnect observers
+  (`rt_ios_scene_ignore_screen_changes`);
+- the window and the GL surface follow the scene (UIKit layout), but SDL's desktop
+  display mode keeps its launch size and SDL snaps the fullscreen window back to it
+  when the app returns to the foreground (the game ended up cropped on the outer
+  display after being started on the inner one). `rt_ios_poll_event` calls
+  `rt_ios_scene_resync`, which forces a layout pass whenever SDL's window size and
+  its view's size differ, so SDL sends the real size again.
+
+The touch controls log the safe-area insets the device reports (`[ios] zone sûre
+…`). The simulator's Duo reports 0 on the sides and top and 34 pt at the bottom
+on the inner display, and 84 pt on the right of the outer display (the camera).
+
+Checked with the game in the iPhone Duo simulator (iOS 27.2), on the inner display
+(951×669 points) and the outer one (678×466): the menus, tapping, a level with the
+touch controls, leaving the app and coming back, and folding and unfolding
+mid-game. Also with a minimal SDL app on an iPhone 16 Pro simulator (iOS 18.4).
+The Duo has two displays; the app follows the one it is on. Not checked: gyro
+aiming (its direction depends on the interface orientation) and the Metal renderer
+on the Duo.
 
 Saves: `tools/ios_device.sh saves status|pull|push` copies them between the Mac
 and the iPhone over the cable ([details](usage.md#saves-between-mac-and-iphone-portal-2));

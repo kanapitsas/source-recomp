@@ -15,6 +15,7 @@
 static UIWindowScene *connected;
 static _Atomic int scene_w, scene_h;   // taille de l'écran de la scène (paysage), 0 sans scène
 static _Atomic int scene_orientation;  // UIInterfaceOrientation de la scène
+static UIWindow *tracked_window;       // fenêtre du jeu (thread principal)
 static _Atomic int waited;             // l'attente de la scène n'a lieu qu'une fois
 
 static void record_scene(UIWindowScene *scene) {
@@ -94,11 +95,34 @@ int rt_ios_scene_wait(double seconds) {
     return atomic_load(&scene_w) != 0;
 }
 
+void rt_ios_scene_ignore_screen_changes(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        Class watch = NSClassFromString(@"SDL_DisplayWatch");   // SDL_uikitmodes.m, observateur de classe
+        if (!watch) return;
+        NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+        [center removeObserver:watch name:@"UIScreenDidConnectNotification" object:nil];
+        [center removeObserver:watch name:@"UIScreenDidDisconnectNotification" object:nil];
+    });
+}
+
 void rt_ios_scene_adopt(SDL_Window *sdl_window) {
     SDL_SysWMinfo info;
     SDL_VERSION(&info.version);
     if (!sdl_window || !SDL_GetWindowWMInfo(sdl_window, &info)) return;
     UIWindow *window = info.info.uikit.window;
     if (window && !window.windowScene && connected) window.windowScene = connected;
+    tracked_window = window;
+}
+
+void rt_ios_scene_resync(SDL_Window *sdl_window) {
+    UIView *view = tracked_window.rootViewController.view;
+    if (!sdl_window || !view || ![NSThread isMainThread]) return;
+    int w = 0, h = 0;
+    SDL_GetWindowSize(sdl_window, &w, &h);
+    CGSize size = view.bounds.size;   // mêmes troncatures que viewDidLayoutSubviews de SDL
+    if ((int)size.width == w && (int)size.height == h) return;
+    [view setNeedsLayout];
+    [view layoutIfNeeded];
 }
 #endif

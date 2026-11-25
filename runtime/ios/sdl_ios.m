@@ -59,6 +59,7 @@ void rt_ios_view_set_scale(void *uiview, float wanted) {
 
 void rt_ios_touch_controls_attach(SDL_Window *window);
 void rt_ios_game_state_poll(void);
+static SDL_Window *game_window;   // pour rt_ios_scene_resync
 SDL_Window *rt_ios_create_window(const char *title, int x, int y, int w, int h, Uint32 flags) {
     if (rt_ios_render_scale() > 1) flags |= SDL_WINDOW_ALLOW_HIGHDPI;
     rt_ios_lifecycle_init();   // pause en arrière-plan (lifecycle_ios.m)
@@ -66,8 +67,10 @@ SDL_Window *rt_ios_create_window(const char *title, int x, int y, int w, int h, 
     // reste détachée (noire) et en portrait. SDL 2.30 crée l'UIWindow sans scène :
     // on attend la scène avant, et on l'y rattache dès la création.
     rt_ios_scene_wait(5);
+    rt_ios_scene_ignore_screen_changes();   // plier le Duo débranche un écran : SDL plantait
     SDL_Window *window = SDL_CreateWindow(title, x, y, down(w), down(h), flags);
     rt_ios_scene_adopt(window);
+    game_window = window;
     rt_ios_touch_controls_attach(window);   // commandes tactiles (touch_controls.m)
     return window;
 }
@@ -111,6 +114,7 @@ void rt_ios_warp_mouse_in_window(SDL_Window *window, int x, int y) { SDL_WarpMou
 // relatifs (visée) gardent leur échelle, pour ne pas tripler la sensibilité.
 int rt_ios_poll_event(SDL_Event *event) {
     rt_ios_pause_while_inactive();   // app quittée : attendre son retour (lifecycle_ios.m)
+    rt_ios_scene_resync(game_window);   // taille de la fenêtre SDL = celle de sa vue (scene_ios.m)
     rt_ios_game_state_poll();   // menus/chargement ou partie (game_state.c), pour les commandes tactiles
     int got = SDL_PollEvent(event);
     if (!got || !event || rt_ios_render_scale() <= 1) return got;

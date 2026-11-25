@@ -14,3 +14,13 @@ int rt_ios_scene_wait(double seconds);
 // a pas encore (UIKit la redimensionne alors à la scène). Sans effet sans scène.
 typedef struct SDL_Window SDL_Window;
 void rt_ios_scene_adopt(SDL_Window *sdl_window);
+// Retire les observateurs de branchement d'écran de SDL (SDL_DisplayWatch). L'app n'utilise
+// qu'un écran ; sur l'iPhone Duo, plier ou déplier l'appareil débranche un UIScreen et
+// SDL_DisplayWatch plantait dans UIKit_DelDisplay. À appeler après SDL_Init.
+void rt_ios_scene_ignore_screen_changes(void);
+// Thread principal, une fois par SDL_PollEvent : si la taille de la fenêtre SDL n'est plus
+// celle de sa vue (SDL ramène la fenêtre plein écran à son mode d'affichage de bureau, figé
+// au lancement, quand l'app revient au premier plan : sur le Duo plié ou déplié entre-temps,
+// le jeu se retrouvait rogné ou dans un coin), force une mise en page : SDL renvoie alors
+// l'événement de redimensionnement avec la vraie taille. Peu coûteux si rien ne change.
+void rt_ios_scene_resync(SDL_Window *sdl_window);
