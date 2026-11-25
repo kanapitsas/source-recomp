@@ -29,6 +29,7 @@ static int fb_w, fb_h;
 static void fb_size(int *w, int *h) { *w = fb_w; *h = fb_h; }
 
 int main(int argc, char **argv) {
+    rt_ios_scene_wait(5);   // SDK 27 : la scène avant que SDL ne lise l'écran (runtime/ios/scene_ios.m)
     (void)argc; (void)argv;
     // Sur appareil, sortie dans Documents/probe.log (rapatriée par tools/ios_device.sh).
     if (getenv("P2_PROBE_LOG") && getenv("HOME")) {
@@ -70,7 +71,6 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, getenv("P2_PROBE_ES2") ? 2 : 3);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    rt_ios_scene_wait(5);   // SDK 27 : fenêtre rattachée à la scène (runtime/ios/scene_ios.m)
     SDL_Window *window = SDL_CreateWindow("probe", 0, 0, 640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
     rt_ios_scene_adopt(window);
     SDL_GLContext context = window ? SDL_GL_CreateContext(window) : NULL;

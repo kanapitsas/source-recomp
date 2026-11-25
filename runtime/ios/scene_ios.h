@@ -6,8 +6,9 @@
 // rattache les fenêtres SDL à la scène connectée.
 #pragma once
 
-// Thread principal : sert la boucle d'UIKit jusqu'à ce que la scène soit
-// connectée (au plus `seconds`). Retourne 1 si une scène est connectée.
+// Thread principal : au premier appel, sert la boucle d'UIKit jusqu'à ce que la scène
+// soit connectée (au plus `seconds`) ; ensuite, ou depuis un autre thread, ne fait
+// qu'indiquer si elle l'est. Retourne 1 si une scène est connectée.
 int rt_ios_scene_wait(double seconds);
 // Rattache la fenêtre UIKit d'une fenêtre SDL à la scène connectée si elle n'en
 // a pas encore (UIKit la redimensionne alors à la scène). Sans effet sans scène.

@@ -137,12 +137,12 @@ accounts in Xcode, set `P2_TEAM_ID` to the one you want.
 
 ### SDK, UIScene and the iPhone Duo
 
-The app is linked against the current iOS SDK (27.1 or newer; `build_ios.py`
-refuses an older one). An app linked against an older SDK runs in
-compatibility mode on the iPhone Duo: the game sees a 667×375-point screen
-(1334×750 at the default Resolution) with black bars. Before this, the link
-declared SDK 18 to keep the classic UIKit lifecycle, because SDL2 2.30.9 knows
-nothing about UIScene, which the SDK 27 requires. Now:
+The app is linked against the current iOS SDK. The iPhone Duo needs 27.1 or
+newer: `build_ios.py` warns with an older Xcode, and the app still works on other
+devices. An app linked against an older SDK runs in compatibility mode on the Duo:
+the game sees a 667×375-point screen (1334×750 at the default Resolution) with
+black bars. The link used to declare SDK 18 to keep the classic UIKit lifecycle,
+because SDL2 2.30.9 knows nothing about UIScene, which SDK 27 requires. Now:
 
 - `ios/Info.plist.in` declares a scene manifest whose delegate is
   `P2SceneDelegate` (`runtime/ios/scene_ios.m`), which records the connected
@@ -150,12 +150,26 @@ nothing about UIScene, which the SDK 27 requires. Now:
 - `rt_ios_create_window` (`runtime/ios/sdl_ios.m`) waits for the scene, lets
   SDL create its window, then sets `windowScene` on the SDL `UIWindow`
   (`rt_ios_scene_adopt`). Without a scene the window stays detached: black,
-  and in portrait. UIKit then sizes it to the scene. SDL itself is not patched.
+  and in portrait. UIKit then sizes it to the scene. SDL itself is not patched;
+- SDL 2.30.9 reads the screen orientation from `-[UIApplication statusBarOrientation]`,
+  which a scene-based app no longer keeps up to date: it announced the Duo as a
+  portrait display (466×678). `scene_ios.m` overrides it with the scene's
+  orientation (landscape before a scene exists: the app is landscape-only);
+- on the Duo's inner display, `UIScreen.mainScreen`, and so SDL's display, stays
+  the outer display's size (678×466) while the window is 951×669 points. SDL
+  builds its desktop display mode from it and snaps its fullscreen window back to
+  that mode whenever the app returns to the foreground, so the game ended up in a
+  corner of the screen, and the footer buttons of the Options and pause menus
+  (BACK, SELECT, DONE) could not be tapped. `scene_ios.m` makes
+  `mainScreen.bounds` the scene's screen size once a scene is connected (the same
+  size on other devices), and `ios/main_ios.c` waits for the scene before SDL
+  reads the screen.
 
-Checked in the iPhone Duo simulator (iOS 27.2) with a minimal SDL app: SDK 18
-gives 667×375 points, SDK 27.2 with the scene gives 678×466 points at 3×
-(1398×2034 pixels) and a full-screen window. The Duo has a second display
-(2007×2853 pixels); the app only uses the main one.
+Checked with the game in the iPhone Duo simulator (iOS 27.2), on the inner
+display (951×669 points) and the outer one (678×466), including leaving the app
+and coming back, and with a minimal SDL app on an iPhone 16 Pro simulator
+(iOS 18.4). The Duo has two displays; the app follows the one it is on at launch.
+Folding or unfolding while the game runs is not handled.
 
 Saves: `tools/ios_device.sh saves status|pull|push` copies them between the Mac
 and the iPhone over the cable ([details](usage.md#saves-between-mac-and-iphone-portal-2));
@@ -182,6 +196,12 @@ Hidden in menus and when a controller connects (`runtime/ios/touch_layout.c`).
 | bottom left, small | camera mode (stick or trackpad) |
 
 Portals are fired by tapping the back of the phone (see [Back taps](#back-taps)).
+
+The controls stay inside the safe area. On devices with rounded corners
+(recognized by a bottom safe-area inset, the home indicator) it is kept at least
+28 pt from the sides and 20 pt from the top: the iPhone Duo reports no inset
+there in landscape, and the pause button and the frame counter were clipped by
+the corners. Devices with square corners (iPhone SE) are unchanged.
 
 ## Settings (iOS Settings app)
 

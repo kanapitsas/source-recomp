@@ -512,7 +512,21 @@ static const CFTimeInterval kQuickLoadHold = 0.5;
 }
 
 // ---- disposition (points, dans la zone sûre) ----
-- (CGRect)area { return UIEdgeInsetsInsetRect(self.bounds, self.safeAreaInsets); }
+// Marges minimales (points) sur les appareils aux coins arrondis, reconnus à leur
+// barre d'accueil (zone sûre du bas non nulle) : l'iPhone Duo ne déclare aucun
+// écart sur les côtés ni en haut en paysage ; sans plancher, la pause, le mode de la
+// caméra et le compteur d'images, posés à quelques points du bord, sont rognés par
+// les coins. Les iPhone à encoche gardent leur zone sûre (59 pt sur les côtés) ; ceux
+// à coins droits (SE) ne changent pas.
+static const CGFloat kMinSideInset = 28, kMinVerticalInset = 20;
+- (CGRect)area {
+    UIEdgeInsets safe = self.safeAreaInsets;
+    if (safe.bottom > 0) {
+        safe.left = MAX(safe.left, kMinSideInset); safe.right = MAX(safe.right, kMinSideInset);
+        safe.top = MAX(safe.top, kMinVerticalInset);
+    }
+    return UIEdgeInsetsInsetRect(self.bounds, safe);
+}
 - (CGFloat)stickRadius { return MIN(66, self.area.size.height * .15); }
 - (CGPoint)restingStick:(BOOL)right {
     CGRect a = self.area;
@@ -780,7 +794,14 @@ static void backtap_touches(NSSet<UITouch *> *touches) {
     [self touchesEnded:touches withEvent:event];
     cancelling = NO;
 }
-- (void)safeAreaInsetsDidChange { [super safeAreaInsetsDidChange]; [self invalidateLayout]; }
+- (void)safeAreaInsetsDidChange {
+    [super safeAreaInsetsDidChange];
+    UIEdgeInsets safe = self.safeAreaInsets;   // journal : ce que l'appareil déclare vraiment (Duo)
+    fprintf(stderr, "[ios] zone sûre haut %.0f gauche %.0f bas %.0f droite %.0f, vue %.0fx%.0f points, orientation %ld%s\n",
+            safe.top, safe.left, safe.bottom, safe.right, self.bounds.size.width, self.bounds.size.height,
+            (long)self.window.windowScene.interfaceOrientation, safe.bottom > 0 ? ", marges minimales" : "");
+    [self invalidateLayout];
+}
 
 // ---- dessin ----
 // Compteur d'images : la mesure de runtime/fps_overlay.c (une image par

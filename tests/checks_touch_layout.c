@@ -27,9 +27,14 @@ RT_CHECK(ios_game_profile_from_plist_key) {
     assert(rt_ios_current_game() == p2);   // hors iOS
 }
 
-// Zones sûres en paysage (points) : iPhone SE, iPhone 15 Pro Max, iPad 11".
+// Zones sûres en paysage (points), avec les marges minimales de touch_controls.m
+// sur les appareils à coins arrondis (28 sur les côtés, 20 en haut ; le bas garde
+// sa barre d'accueil) : iPhone SE (coins droits, inchangé), iPhone 15 Pro Max, iPad 11",
+// iPhone Duo (petit écran 678×466, grand écran 951×669 : zone sûre nulle en haut et
+// sur les côtés, 34 pt de barre d'accueil en bas).
 static const struct { double x, y, w, h; } areas[] = {
-    {0, 0, 667, 375}, {59, 0, 932 - 118, 430 - 21}, {0, 0, 1194, 834 - 20}};
+    {0, 0, 667, 375}, {59, 20, 932 - 118, 430 - 20 - 21}, {28, 20, 1194 - 56, 834 - 20 - 20},
+    {28, 20, 678 - 56, 466 - 20 - 34}, {28, 20, 951 - 56, 669 - 20 - 34}};
 
 RT_CHECK(ios_touch_layout_fits_the_screen) {
     for (int layout = RT_IOS_LAYOUT_PORTAL2; layout <= RT_IOS_LAYOUT_HL2; ++layout) {
