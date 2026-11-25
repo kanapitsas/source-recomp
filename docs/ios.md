@@ -205,10 +205,13 @@ buttons as in landscape.
   one for edge taps, and the in-plane rotation (the hand makes the phone pivot, the same
   way in every orientation); for gyro, yaw follows the real vertical and pitch is the
   rotation about the horizontal axis. The portal buttons follow the usual rule (shown
-  without back taps). Both are covered by synthetic samples only (including frames with the
-  axes laid out differently and a phone held crooked): if left and right are swapped for
-  back taps in portrait, set `P2_BACKTAP_INVERT_PORTRAIT=1` and send the sensor log
-  (`P2_BACKTAP_LOG=1`);
+  without back taps). Both are covered by synthetic samples (including frames with the
+  axes laid out differently and a phone held crooked) and were tried on a Duo, in portrait
+  and landscape. On a Duo (model `iPhone19,4`, logged at startup as `[ios] modèle …`), the
+  physical sign gave the opposite portal, so the app mirrors left and right by itself
+  (`rt_backtap_params.mirror`, set in `backtap_ios.m`; other iPhones are unchanged). It is
+  independent of the "Swap left and right" setting, which still flips the result once more
+  on any device. The sensor log (`P2_BACKTAP_LOG=1`) helps if a side is still off;
 - the app follows the orientation iOS gives the scene at launch (it knows how the phone is
   held, including the Duo's inner display). On the inner display it keeps that choice:
   landscape, or portrait split in two; the game window is set to the game's half
@@ -249,9 +252,9 @@ touch controls, leaving the app and coming back, and folding and unfolding
 mid-game; in portrait on the inner display: menus, pause from the bottom half,
 rotating back and forth, starting the app and then rotating the phone. The game
 also starts full screen in landscape on an iPhone 16 Pro simulator (iOS 18.4).
-The Duo has two displays; the app follows the one it is on. Not checked: gyro
-aiming and back taps in portrait on a phone (synthetic tests only), the Metal renderer
-on the Duo, how the portrait layout feels in the hand, and the half-open pose.
+The Duo has two displays; the app follows the one it is on. Also tried on a Duo:
+gyro aiming and back taps in portrait and landscape, and the portrait layout.
+Not checked: the half-open pose.
 
 Saves: `tools/ios_device.sh saves status|pull|push` copies them between the Mac
 and the iPhone over the cable ([details](usage.md#saves-between-mac-and-iphone-portal-2));
@@ -313,8 +316,7 @@ The page is in English, and in French on a device set to French
 | Back taps | `P2_BACKTAP` | enabled by default |
 | Vibrate when firing | `P2_HAPTICS` | on by default: a light Taptic Engine tap for each portal fired from the overlay (button or back tap) |
 | Tap sensitivity | `P2_BACKTAP_SENSITIVITY` | 0.75 / 1 / 1.33: thresholds are divided by this value |
-| Swap left and right | `P2_BACKTAP_INVERT` | |
-| Swap left and right in portrait only | `P2_BACKTAP_INVERT_PORTRAIT` | |
+| Swap left and right | `P2_BACKTAP_INVERT` | off (on top of the correction the app applies on an iPhone Duo) |
 | Portal buttons | `P2_PORTAL_BUTTONS` | automatic (when back taps are off), always, never |
 | Record taps | `P2_BACKTAP_RAW=Documents/backtap/` | off; see [backtap.md](backtap.md) |
 | Log | `P2_LOG_FILE=Documents/game.log` | |

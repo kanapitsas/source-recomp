@@ -72,7 +72,7 @@ void rt_backtap_defaults(rt_backtap_params *p) {
     p->lateral_ratio = 0.7f;  // repli latéral seulement si y porte 70 % du pic
     p->lateral_sign = 1;
     p->invert = 0;
-    p->invert_portrait = 0;
+    p->mirror = 0;            // posé par l'app sur l'iPhone Duo (backtap_ios.m), pas par l'environnement
     p->z_sign = 0;            // à fixer après calibration : dos et écran poussent en sens opposés
     p->refractory = 0.25f;    // 4 tapes/s au plus ; couvre les rebonds de la main
     p->touch_guard = 0.08f;   // ±80 ms autour d'un début ou d'une fin de toucher
@@ -109,7 +109,6 @@ void rt_backtap_params_from_env(rt_backtap_params *p) {
     p->lateral_sign = rt_backtap_env_sign("P2_BACKTAP_LATERAL", p->lateral_sign);
     p->z_sign = rt_backtap_env_sign("P2_BACKTAP_ZSIGN", p->z_sign);
     p->invert = rt_backtap_env_sign("P2_BACKTAP_INVERT", 0) > 0;
-    p->invert_portrait = rt_backtap_env_sign("P2_BACKTAP_INVERT_PORTRAIT", 0) > 0;
 }
 
 void rt_backtap_init(rt_backtap *d, const rt_backtap_params *p) {
@@ -234,7 +233,7 @@ static void judge(rt_backtap *d, int orient, int active, rt_backtap_report *r) {
     const int by_gravity = g_now && plane >= 0.35f * norm3(g_now->g) && norm3(g_now->g) > 0.3f;
     float dx = 0, dy = 0;   // bord du bas de l'écran, dans le repère de l'appareil
     if (by_gravity) { dx = g_now->g[0] / plane; dy = g_now->g[1] / plane; }
-    const float flip = (p->invert ? -1.0f : 1.0f) * (portrait && p->invert_portrait ? -1.0f : 1.0f);
+    const float flip = (p->invert ? -1.0f : 1.0f) * (p->mirror ? -1.0f : 1.0f);
     if (by_gravity) {
         // > 0 : vers la droite de l'écran.
         r->side_score = p->side_x_weight * (r->rot[0] * dx + r->rot[1] * dy) - r->rot[2];

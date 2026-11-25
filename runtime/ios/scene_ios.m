@@ -9,6 +9,7 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/sysctl.h>
 #include "env_ios.h"
 #include "scene_ios.h"
 
@@ -152,6 +153,23 @@ __attribute__((constructor)) static void install_screen_overrides(void) {
         if (w && h && screen == UIScreen.mainScreen) return CGRectMake(0, 0, w, h);
         return original_screen_bounds(screen, @selector(bounds));
     }));
+}
+
+int rt_ios_is_iphone_duo(void) {
+    static _Atomic int duo = -1;
+    int known = atomic_load(&duo);
+    if (known >= 0) return known;
+    char model[64] = {0};
+    const char *simulated = getenv("SIMULATOR_MODEL_IDENTIFIER");
+    if (simulated) snprintf(model, sizeof(model), "%s", simulated);
+    else {
+        size_t size = sizeof(model) - 1;
+        sysctlbyname("hw.machine", model, &size, NULL, 0);
+    }
+    known = !strcmp(model, "iPhone19,4");
+    atomic_store(&duo, known);
+    fprintf(stderr, "[ios] modèle %s%s\n", model, known ? " (iPhone Duo)" : "");
+    return known;
 }
 
 int rt_ios_scene_wait(double seconds) {

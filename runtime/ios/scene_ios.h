@@ -6,6 +6,10 @@
 // rattache les fenêtres SDL à la scène connectée.
 #pragma once
 
+// 1 sur un iPhone Duo (identifiant de modèle iPhone19,4 ; SIMULATOR_MODEL_IDENTIFIER au
+// simulateur), 0 ailleurs. Utilisable depuis n'importe quel thread.
+int rt_ios_is_iphone_duo(void);
+
 // Thread principal : au premier appel, sert la boucle d'UIKit jusqu'à ce que la scène
 // soit connectée (au plus `seconds`) ; ensuite, ou depuis un autre thread, ne fait
 // qu'indiquer si elle l'est. Retourne 1 si une scène est connectée.

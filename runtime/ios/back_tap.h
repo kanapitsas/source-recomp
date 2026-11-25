@@ -22,8 +22,8 @@ typedef struct {
     float gyro_calm_max;  // g : agitation maximale dans les 50 ms d'avant (une tape légère ne se voit que téléphone immobile)
     float lateral_ratio; // tape latérale : part minimale de l'axe y dans le pic d'accélération
     int lateral_sign;    // tape latérale : 1 convention supposée, -1 inversée, 0 désactivée
-    int invert;          // 1 : gauche et droite permutées
-    int invert_portrait; // 1 : permutées en portrait seulement (en plus de invert)
+    int invert;          // 1 : gauche et droite permutées (réglage du joueur)
+    int mirror;          // 1 : sens physique inversé par l'appareil (iPhone Duo, d'après son capteur), en plus de invert
     int z_sign;          // 0 : indifférent ; ±1 : signe exigé de a_z au départ du pic
     float refractory;    // s : rien après un candidat pendant ce délai
     float touch_guard;   // s : rien à moins de ce délai d'un début ou d'une fin de toucher

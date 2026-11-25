@@ -166,6 +166,22 @@ RT_CHECK(backtap_side_does_not_depend_on_the_orientation_given_when_not_flat) {
         }
 }
 
+// mirror (iPhone Duo) et invert (réglage du joueur) permutent chacun la gauche et la droite ;
+// les deux ensemble reviennent au sens physique, en paysage comme en portrait.
+RT_CHECK(backtap_mirror_and_invert_each_swap_the_sides) {
+    for (int portrait = 0; portrait <= 1; ++portrait)
+        for (int mirror = 0; mirror <= 1; ++mirror)
+            for (int invert = 0; invert <= 1; ++invert)
+                for (int side = -1; side <= 1; side += 2) {
+                    Scene sc = portrait ? portrait_scene(100) : scene(100);
+                    sc.params.mirror = mirror; sc.params.invert = invert;
+                    if (portrait) sc.taps[sc.ntaps++] = (Tap){1.0, 0, 2, 0.3f, 0.4f, 0, 0, 0, side};
+                    else back_tap(&sc, 1.0, side);
+                    Outcome o = play(&sc);
+                    assert(o.accepted == 1 && o.side[0] == (mirror ^ invert ? -side : side));
+                }
+}
+
 RT_CHECK(backtap_corner_tap_side_from_screen_plane_rotation) {
     for (int r = 0; r < 2; ++r)
         for (int orient = -1; orient <= 1; orient += 2)
@@ -464,6 +480,13 @@ RT_CHECK(backtap_params_from_env_bounds) {
     assert(fabsf(p.accel_min - 0.3f) < 1e-6f && p.jerk_min == 0);
     assert(p.rot_min == def.rot_min && fabsf(p.gyro_rot_min - def.gyro_rot_min / 2) < 1e-6f);
     assert(p.flat_z == def.flat_z && p.touch_guard == def.touch_guard);
+
+    // Sens physique par défaut ; P2_BACKTAP_INVERT=1 permute ; mirror (iPhone Duo) ne vient pas de l'environnement.
+    assert(def.invert == 0 && def.mirror == 0);
+    setenv("P2_BACKTAP_INVERT", "1", 1);
+    rt_backtap_params_from_env(&p);
+    assert(p.invert == 1 && p.mirror == 0);
+    unsetenv("P2_BACKTAP_INVERT");
 
     // Signes : > 0, < 0 ou 0 ; absent : valeur par défaut.
     setenv("P2_BACKTAP_LATERAL", "-3", 1);

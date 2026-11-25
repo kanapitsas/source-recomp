@@ -21,6 +21,7 @@
 #include "backtap_dataset.h"
 #include "backtap_ios.h"
 #include "env_ios.h"
+#include "scene_ios.h"
 
 static CMMotionManager *backtap_motion;
 static NSOperationQueue *backtap_queue;
@@ -203,6 +204,9 @@ void rt_ios_backtap_start(void) {
     }
     rt_backtap_params p;
     rt_backtap_params_from_env(&p);   // valeurs par défaut, sensibilité, variables par seuil (back_tap.c)
+    // Sur l'iPhone Duo, le sens physique donne la gauche et la droite permutées (réglé sur l'appareil,
+    // portrait et paysage) : on corrige ici, sans toucher au réglage « Permuter » du joueur.
+    p.mirror = rt_ios_is_iphone_duo();
     backtap_log = rt_ios_env_flag("P2_BACKTAP_LOG", 0);
     backtap_hold = rt_ios_env_float("P2_BACKTAP_HOLD", 0.05f, 0);
     const char *raw = getenv("P2_BACKTAP_RAW");
