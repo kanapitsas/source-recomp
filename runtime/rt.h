@@ -554,6 +554,7 @@ void rt_guest_qsort(CPU *c, uint32_t base, uint32_t count, uint32_t size, uint32
 int rt_stat_shim(CPU *c, const char *name);
 
 void rt_guest_enter(void);
+void rt_guest_enter_no_yield(void);   // sans cession de la porte (scheduler.c)
 void rt_guest_leave(void);
 unsigned rt_guest_suspend(void);
 void rt_guest_resume(unsigned saved);

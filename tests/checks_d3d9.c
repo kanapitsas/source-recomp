@@ -14,6 +14,9 @@ void rt_d3d9_draw_overlay(void *dev);
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <sched.h>
+#include <stdatomic.h>
 #include <execinfo.h>
 #include <SDL2/SDL.h>
 
@@ -519,6 +522,40 @@ RT_CHECK(d3d9_alloc_app_is_guest_memory) {
     assert(rt_shim(&c, "Direct3DCreate9") == 1 && c.eax == 0);
     if (saved) setenv("P2_D3D9METAL", saved, 1); else unsetenv("P2_D3D9METAL");
     free(saved);
+    drop_test_library();
+}
+
+// alloc_app et free_app gardent la porte invitée quand l'appelant la tient :
+// la bibliothèque peut les appeler sous un de ses verrous, et un thread qui
+// prendrait la porte pendant une cession pourrait attendre ce verrou.
+// rt_guest_enter cède la porte une fois sur 1024 quand un thread l'attend.
+static atomic_int gate_waiter_ran;
+static void *wait_for_gate(void *arg) {
+    (void)arg;
+    rt_guest_enter();
+    atomic_store(&gate_waiter_ran, 1);
+    rt_guest_leave();
+    return NULL;
+}
+RT_CHECK(d3d9_alloc_app_keeps_the_guest_gate) {
+    use_test_library(fake_init);
+    CPU c; rt_cpu_reset(&c); c.esp = STACK;
+    PUSH(&c, 32); PUSH(&c, RT_RETURN_SENTINEL);
+    assert(rt_shim(&c, "Direct3DCreate9") == 1 && c.eax);
+    size_t page = (size_t)sysconf(_SC_PAGESIZE);
+    atomic_store(&gate_waiter_ran, 0);
+    rt_guest_enter();   // comme un thread du jeu dans un appel d3d9
+    pthread_t waiter;
+    assert(!pthread_create(&waiter, NULL, wait_for_gate, NULL));
+    while (!atomic_load(&rt_guest_waiting)) sched_yield();   // le thread attend la porte
+    for (int i = 0; i < 64 * 1024 && !atomic_load(&gate_waiter_ran); ++i) {
+        void *p = fake_host->alloc_app(fake_host->user, page, page);
+        assert(p);
+        fake_host->free_app(fake_host->user, p, page);
+    }
+    assert(!atomic_load(&gate_waiter_ran));
+    rt_guest_leave();
+    assert(!pthread_join(waiter, NULL) && atomic_load(&gate_waiter_ran));
     drop_test_library();
 }
 
