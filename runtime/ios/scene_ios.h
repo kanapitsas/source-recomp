@@ -34,3 +34,7 @@ void rt_ios_scene_resync(SDL_Window *sdl_window);
 // (UIView *) de cette seconde fenêtre, sinon NULL.
 int rt_ios_scene_split(void);
 void *rt_ios_scene_controls_view(void);
+// Tout thread : la scène est le grand écran de l'iPhone Duo (déplié). Les capteurs de mouvement y sont
+// tournés d'un quart de tour par rapport à ceux du petit écran (rt_backtap_set_turn). Indépendant de
+// P2_PORTRAIT_SPLIT.
+int rt_ios_scene_wide_display(void);

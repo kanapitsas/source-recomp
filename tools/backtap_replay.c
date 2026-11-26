@@ -44,6 +44,8 @@ int main(int argc, char **argv) {
     while (fgets(line, sizeof(line), f)) {
         rt_backtap_sample s; int orient, active; double t;
         if (line[0] == 'f' && sscanf(line, "f %lf", &t) == 1) { rt_btds_flag_add(&ds, t); continue; }   // bouton ✗
+        int turn;
+        if (line[0] == 'w' && sscanf(line, "w %lf %d", &t, &turn) == 2) { rt_backtap_set_turn(&d, turn); rt_backtap_set_turn(&wide, turn); continue; }   // grand écran du Duo
         if (line[0] == 't' && sscanf(line, "t %lf", &t) == 1) { rt_backtap_touch(&d, t); rt_backtap_touch(&wide, t); rt_btds_touch_add(&ds, t); continue; }
         if (line[0] != 'm' || sscanf(line, "m %lf %f %f %f %f %f %f %f %f %f %d %d", &s.t, &s.a[0], &s.a[1], &s.a[2], &s.w[0],
                                      &s.w[1], &s.w[2], &s.g[0], &s.g[1], &s.g[2], &orient, &active) != 12) continue;

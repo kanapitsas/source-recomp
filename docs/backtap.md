@@ -7,8 +7,8 @@ thresholds. Two paths: acceleration (0.10 g, 6 g/s) or gyroscope (0.06 g,
 6 g/s, 0.30 rad/s rotation, phone still just before); on the left, the index finger rotates the phone
 (0.4 to 0.7 rad/s) while barely accelerating it (0.07 to 0.10 g).
 Side: score = 0.5 × brief rotation around the device's x axis (vertical in
-landscape, relative to the screen orientation, or to gravity as a fallback; on an iPhone Duo
-the screen's vertical axis is read from gravity, see [iOS](ios.md)) + rotation
+landscape, relative to the screen orientation, or to gravity as a fallback when the orientation
+is unknown; the Duo's inner display turns the sensor frame a quarter turn, see [iOS](ios.md)) + rotation
 around z relative to the screen (the tapping hand pivots the phone within its
 own plane: to the left, z > 0, for a left tap, in both landscape
 orientations); 79/79 labeled taps, versus 72/79 with x alone (taps near a
@@ -90,7 +90,7 @@ examples labeled as taps (`fired`, `missed`, `wrong_side`, `user_wrong_side`,
 those reported with the ✗ button, counted over the whole file. The line turns
 yellow for a second when ✗ is pressed; the X count goes up about 5 s later, and
 not at all if no candidate matched (a missed tap too soft even for the wide
-detector). Raw recordings (`P2_BACKTAP_RAW`) also log presses (`f` lines),
+detector). Raw recordings (`P2_BACKTAP_RAW`) also log presses (`f` lines) and each change of display on a Duo (`w` lines: 1 on the inner display, whose sensor frame is turned a quarter turn),
 which the replay tool reads.
 
 | Variable | Default | Purpose |

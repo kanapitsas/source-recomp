@@ -18,6 +18,7 @@
 static UIWindowScene *connected;
 static _Atomic int scene_w, scene_h;   // taille de l'écran de la scène (paysage), 0 sans scène
 static _Atomic int scene_orientation;  // UIInterfaceOrientation de la scène
+static _Atomic int scene_wide;         // la scène est le grand écran d'un téléphone (inférieur du Duo)
 static UIWindow *tracked_window;       // fenêtre du jeu (thread principal)
 static void apply_layout(void);
 static _Atomic int waited;             // l'attente de la scène n'a lieu qu'une fois
@@ -25,11 +26,11 @@ static _Atomic int waited;             // l'attente de la scène n'a lieu qu'une
 // Grand écran d'un téléphone (inférieur de l'iPhone Duo : 669 pt de côté court, contre 440 au
 // plus pour les autres iPhone) : le jeu y tient en portrait dans la moitié haute, les
 // commandes dans la moitié basse, comme une console à deux écrans. P2_PORTRAIT_SPLIT=0 : jamais.
-static BOOL wide_phone_display(UIWindowScene *scene) {
+static BOOL wide_display(UIWindowScene *scene) {
     CGSize size = scene.coordinateSpace.bounds.size;
-    return UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone && fmin(size.width, size.height) >= 500
-        && rt_ios_env_flag("P2_PORTRAIT_SPLIT", 1);
+    return UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone && fmin(size.width, size.height) >= 500;
 }
+static BOOL wide_phone_display(UIWindowScene *scene) { return wide_display(scene) && rt_ios_env_flag("P2_PORTRAIT_SPLIT", 1); }
 // Zone du jeu dans la scène : toute la scène, ou la moitié haute en portrait sur ce grand écran.
 static CGRect game_rect(UIWindowScene *scene) {
     CGRect bounds = scene.coordinateSpace.bounds;
@@ -43,6 +44,7 @@ static void record_scene(UIWindowScene *scene) {
     atomic_store(&scene_w, (int)lround(fmax(size.width, size.height)));
     atomic_store(&scene_h, (int)lround(fmin(size.width, size.height)));
     atomic_store(&scene_orientation, (int)scene.interfaceOrientation);
+    atomic_store(&scene_wide, wide_display(scene));
     // SDL tire les orientations permises de ce réglage chaque fois qu'UIKit les demande
     // (Info.plist y ajoute le portrait pour le Duo seulement).
     const char *wanted = wide_phone_display(scene) ? "LandscapeLeft LandscapeRight Portrait" : "LandscapeLeft LandscapeRight";
@@ -122,7 +124,7 @@ void rt_ios_touch_controls_rehost(void);       // touch_controls.m
 - (void)sceneDidDisconnect:(UIScene *)scene {
     if (scene != connected) return;
     connected = nil;
-    atomic_store(&scene_w, 0); atomic_store(&scene_h, 0); atomic_store(&scene_orientation, 0);
+    atomic_store(&scene_w, 0); atomic_store(&scene_h, 0); atomic_store(&scene_orientation, 0); atomic_store(&scene_wide, 0);
 }
 @end
 
@@ -276,6 +278,7 @@ static void apply_layout(void) {
     rt_ios_touch_controls_rehost();
 }
 
+int rt_ios_scene_wide_display(void) { return atomic_load(&scene_wide); }
 int rt_ios_scene_split(void) { return controls_window && !controls_window.hidden; }
 void *rt_ios_scene_controls_view(void) { return rt_ios_scene_split() ? (__bridge void *)controls_window.rootViewController.view : NULL; }
 
