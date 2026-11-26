@@ -194,7 +194,8 @@ buttons as in landscape.
 - the touch controls move into that second window (`rt_ios_scene_controls_view`).
   Their area has no top inset (it is the middle of the screen) and 20 pt on the
   sides; both sticks rest 5 % of the width further in than in landscape
-  (`rt_touch_stick_rest`). Back taps and gyro aiming work in portrait. Both read the screen's horizontal axis
+  (`rt_touch_stick_rest`). Back taps and gyro aiming work in portrait. On a Duo (model
+  `iPhone19,4`, logged at startup as `[ios] modèle …`) both read the screen's horizontal axis
   from gravity instead of assuming how the device axes lie against the screen: gravity
   projected on the screen plane (device x, y) points to the bottom edge of the screen, and
   the right is that edge turned a quarter turn around z. The first version assumed an
@@ -203,13 +204,19 @@ buttons as in landscape.
   landscape) is only the fallback when the phone is nearly flat. For back taps the side
   comes from the rotation about the screen's vertical axis, the push along the horizontal
   one for edge taps, and the in-plane rotation (the hand makes the phone pivot, the same
-  way in every orientation); for gyro, yaw follows the real vertical and pitch is the
-  rotation about the horizontal axis. The portal buttons follow the usual rule (shown
+  way in every orientation); the light-tap (gyroscope) path looks at that same vertical
+  axis, not at device x; for gyro, yaw follows the real vertical and pitch is the
+  rotation about the horizontal axis. Other iPhones keep the earlier reading, where the
+  interface orientation decides: lying on one side, gravity points along the screen's
+  side while the game stays in landscape, and a gravity-based reading would take that side
+  for the bottom of the screen and read the tap on the wrong axis
+  (`screen_by_gravity` in `rt_backtap_params` and `rt_gyro_params`, set in `backtap_ios.m` and
+  `gyro_ios.m`, tested in `tests/checks_back_tap.c` and `tests/checks_gyro_aim.c`). The portal buttons follow the usual rule (shown
   without back taps). Both are covered by synthetic samples (including frames with the
   axes laid out differently and a phone held crooked) and were tried on a Duo, in portrait
-  and landscape. On a Duo (model `iPhone19,4`, logged at startup as `[ios] modèle …`), the
-  physical sign gave the opposite portal, so the app mirrors left and right by itself
-  (`rt_backtap_params.mirror`, set in `backtap_ios.m`; other iPhones are unchanged). It is
+  and landscape. On the Duo the physical sign gave the opposite portal, so the app mirrors
+  left and right by itself (`rt_backtap_params.mirror`, set in `backtap_ios.m`; other iPhones
+  are unchanged). It is
   independent of the "Swap left and right" setting, which still flips the result once more
   on any device. The sensor log (`P2_BACKTAP_LOG=1`) helps if a side is still off;
 - the app follows the orientation iOS gives the scene at launch (it knows how the phone is
@@ -282,11 +289,10 @@ Hidden in menus and when a controller connects (`runtime/ios/touch_layout.c`).
 
 Portals are fired by tapping the back of the phone (see [Back taps](#back-taps)).
 
-The controls stay inside the safe area. On devices with rounded corners
-(recognized by a bottom safe-area inset, the home indicator) it is kept at least
-28 pt from the sides and 20 pt from the top: the iPhone Duo reports no inset
-there in landscape, and the pause button and the frame counter were clipped by
-the corners. Devices with square corners (iPhone SE) are unchanged.
+The controls stay inside the safe area. On the iPhone Duo (and only there) it is
+kept at least 28 pt from the sides and 20 pt from the top: the Duo reports no
+inset there in landscape, and the pause button and the frame counter were clipped
+by the corners. Other iPhones and iPads keep the safe area they report.
 
 ## Settings (iOS Settings app)
 

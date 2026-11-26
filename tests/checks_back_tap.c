@@ -124,6 +124,7 @@ static Scene portrait_scene(double rate) {
     Scene sc = scene(rate);
     sc.orient = RT_BACKTAP_PORTRAIT;
     sc.gravity[0] = 0; sc.gravity[1] = -0.8f; sc.gravity[2] = -0.6f;
+    sc.params.screen_by_gravity = 1;   // le portrait n'existe que sur l'iPhone Duo
     return sc;
 }
 RT_CHECK(backtap_portrait_left_and_right_back_taps_pick_their_side) {
@@ -159,11 +160,33 @@ RT_CHECK(backtap_side_does_not_depend_on_the_orientation_given_when_not_flat) {
     for (int orient = -1; orient <= RT_BACKTAP_PORTRAIT; ++orient)
         for (int side = -1; side <= 1; side += 2) {
             Scene sc = scene(100);
+            sc.params.screen_by_gravity = 1;
             back_tap(&sc, 1.0, side);   // physique du paysage gauche (gravité +x)
             sc.orient = orient;
             Outcome o = play(&sc);
             assert(o.accepted == 1 && o.side[0] == side);
         }
+}
+
+// Hors iPhone Duo (screen_by_gravity = 0), l'orientation de l'interface décide, comme avant le Duo :
+// couché sur le côté, la gravité tire vers le côté de l'écran (axe y) alors que le jeu reste en paysage ;
+// elle ne doit pas être prise pour le bas de l'écran (même côté lu quelle que soit la tape).
+RT_CHECK(backtap_without_screen_by_gravity_the_interface_orientation_decides) {
+    for (int r = 0; r < 2; ++r)
+        for (int orient = -1; orient <= 1; orient += 2)
+            for (int side = -1; side <= 1; side += 2) {
+                Scene sc = scene(kRates[r]); sc.orient = orient;
+                sc.gravity[0] = 0.1f * (float)orient; sc.gravity[1] = -0.8f; sc.gravity[2] = -0.5f;   // sur le côté
+                back_tap(&sc, 1.0, side);
+                Outcome o = play(&sc);
+                assert(o.accepted == 1 && o.side[0] == side && !strcmp(o.method[0], "rotation"));
+            }
+    // Un téléphone droit sans orientation d'interface connue reste « inconnu » : pas de déduction par la gravité.
+    Scene sc = scene(100); sc.orient = 0;
+    sc.gravity[0] = 0; sc.gravity[1] = -0.8f; sc.gravity[2] = -0.6f;
+    back_tap(&sc, 1.0, 1);
+    Outcome o = play(&sc);
+    assert(o.accepted == 0 && !strcmp(o.reject[0], "orientation inconnue"));
 }
 
 // mirror (iPhone Duo) et invert (réglage du joueur) permutent chacun la gauche et la droite ;
@@ -440,6 +463,21 @@ RT_CHECK(backtap_light_tap_found_by_gyroscope) {
             o = play(&sc);
             assert(o.accepted == 1);
             for (int i = 0; i < o.reports && i < 8; ++i) if (!o.reject[i]) assert(o.side[i] == side);
+        }
+}
+
+// Voie gyroscope en portrait (iPhone Duo) : la rotation qui compte est celle autour de l'axe vertical de
+// l'écran (y), pas autour de x ; une tape légère qui tourne surtout autour de y n'est pas manquée.
+RT_CHECK(backtap_light_tap_found_by_gyroscope_in_portrait) {
+    for (int r = 0; r < 2; ++r)
+        for (int side = -1; side <= 1; side += 2) {
+            Scene sc = portrait_scene(kRates[r]);
+            sc.taps[sc.ntaps++] = (Tap){1.0, 0, 2, 0.07f, 0.6f, 0, 0, 0, side};
+            Outcome o = play(&sc);
+            assert(o.reports == 1 && o.accepted == 1 && o.side[0] == side);
+            sc.taps[0].rot = 0.15f;   // sans rotation franche : trop faible
+            o = play(&sc);
+            assert(o.accepted == 0);
         }
 }
 

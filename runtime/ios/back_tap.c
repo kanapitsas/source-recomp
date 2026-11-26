@@ -73,6 +73,7 @@ void rt_backtap_defaults(rt_backtap_params *p) {
     p->lateral_sign = 1;
     p->invert = 0;
     p->mirror = 0;            // posé par l'app sur l'iPhone Duo (backtap_ios.m), pas par l'environnement
+    p->screen_by_gravity = 0; // idem : les autres iPhone gardent la lecture d'avant (orientation de l'interface)
     p->z_sign = 0;            // à fixer après calibration : dos et écran poussent en sens opposés
     p->refractory = 0.25f;    // 4 tapes/s au plus ; couvre les rebonds de la main
     p->touch_guard = 0.08f;   // ±80 ms autour d'un début ou d'une fin de toucher
@@ -124,6 +125,15 @@ void rt_backtap_touch(rt_backtap *d, double t) {
 }
 
 static float norm3(const float *v) { return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
+// Bord du bas de l'écran dans le repère de l'appareil, d'après la gravité : (dx, dy) unitaire dans le plan xy.
+// Faux (et (1, 0), l'axe x, en paysage) hors iPhone Duo, ou quasi à plat où ce bord n'est plus défini.
+static int screen_down(const rt_backtap_params *p, const float *g, float *dx, float *dy) {
+    const float plane = hypotf(g[0], g[1]), n = norm3(g);
+    *dx = 1; *dy = 0;
+    if (!p->screen_by_gravity || plane < 0.35f * n || n <= 0.3f) return 0;
+    *dx = g[0] / plane; *dy = g[1] / plane;
+    return 1;
+}
 static double delay_of(const rt_backtap_params *p) { return fmax(0.100, p->touch_guard + 0.020); }
 static const rt_backtap_sample *at(const rt_backtap *d, unsigned long i) { return &d->ring[i % RT_BACKTAP_RING]; }
 
@@ -210,7 +220,7 @@ static void judge(rt_backtap *d, int orient, int active, rt_backtap_report *r) {
     r->orient = orient;
     if (!r->orient && g_now) {
         if (fabsf(g_now->g[0]) >= 0.3f) r->orient = g_now->g[0] > 0 ? 1 : -1;
-        else if (g_now->g[1] <= -0.7f) r->orient = RT_BACKTAP_PORTRAIT;   // droit : la gravité tire vers -y
+        else if (p->screen_by_gravity && g_now->g[1] <= -0.7f) r->orient = RT_BACKTAP_PORTRAIT;   // droit : la gravité tire vers -y
     }
     const int portrait = r->orient == RT_BACKTAP_PORTRAIT;
 
@@ -229,10 +239,11 @@ static void judge(rt_backtap *d, int orient, int active, rt_backtap_report *r) {
     // soit l'orientation. Cela ne suppose rien sur la façon dont les axes de l'appareil sont posés
     // par rapport à l'écran (iPhone Duo : paysage, portrait) ; quasi à plat, le bord du bas n'est
     // plus défini : on retombe sur l'orientation de l'interface (y en paysage, signé ; x en portrait).
-    float plane = g_now ? hypotf(g_now->g[0], g_now->g[1]) : 0;
-    const int by_gravity = g_now && plane >= 0.35f * norm3(g_now->g) && norm3(g_now->g) > 0.3f;
-    float dx = 0, dy = 0;   // bord du bas de l'écran, dans le repère de l'appareil
-    if (by_gravity) { dx = g_now->g[0] / plane; dy = g_now->g[1] / plane; }
+    // Seulement si screen_by_gravity (iPhone Duo). Ailleurs, couché sur le côté, la gravité tire vers
+    // le côté de l'écran alors que l'interface reste en paysage : elle prendrait ce côté pour le bas
+    // et lirait le côté de la tape sur le mauvais axe. Les autres iPhone gardent l'orientation de l'interface.
+    float dx = 1, dy = 0;   // bord du bas de l'écran, dans le repère de l'appareil (x : repli, comme avant le Duo)
+    const int by_gravity = g_now && screen_down(p, g_now->g, &dx, &dy);
     const float flip = (p->invert ? -1.0f : 1.0f) * (p->mirror ? -1.0f : 1.0f);
     if (by_gravity) {
         // > 0 : vers la droite de l'écran.
@@ -258,7 +269,7 @@ static void judge(rt_backtap *d, int orient, int active, rt_backtap_report *r) {
     }
 
     int by_accel = r->peak >= p->accel_min && r->jerk >= p->jerk_min;
-    int by_gyro = r->peak >= p->gyro_accel_min && r->jerk >= p->jerk_min && fabsf(r->rot[0]) >= p->gyro_rot_min &&
+    int by_gyro = r->peak >= p->gyro_accel_min && r->jerk >= p->jerk_min && fabsf(r->rot[0] * dx + r->rot[1] * dy) >= p->gyro_rot_min &&
                   r->tail_rms <= p->gyro_calm_max;
     r->weak = !by_accel && !by_gyro;
     r->gyro = !by_accel && by_gyro;
@@ -293,7 +304,11 @@ int rt_backtap_feed(rt_backtap *d, const rt_backtap_sample *s, int orient, int a
         double dt = s->t - prev->t;
         if (s->t >= d->refractory_until && dt > 0 && dt <= 0.1) {
             float da[3] = {s->a[0] - prev->a[0], s->a[1] - prev->a[1], s->a[2] - prev->a[2]};
-            float m = norm3(s->a), jerk = norm3(da) / (float)dt, wjerk = fabsf(s->w[0] - prev->w[0]) / (float)dt;
+            float m = norm3(s->a), jerk = norm3(da) / (float)dt, wjerk;
+            {   // rotation autour de l'axe vertical de l'écran (x en paysage ; y en portrait sur le Duo)
+                float ux, uy; screen_down(&d->p, s->g, &ux, &uy);
+                wjerk = fabsf((s->w[0] - prev->w[0]) * ux + (s->w[1] - prev->w[1]) * uy) / (float)dt;
+            }
             const rt_backtap_params *p = &d->p;
             int strong = (m >= p->accel_min && jerk >= p->jerk_min) || (m >= p->gyro_accel_min && wjerk >= p->gyro_jerk_min);
             float f = p->onset_factor;

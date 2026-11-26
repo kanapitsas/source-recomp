@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include "gyro_aim.h"
 #include "gyro_ios.h"
+#include "scene_ios.h"
 
 static CMMotionManager *gyro_motion;
 static NSOperationQueue *gyro_queue;
@@ -29,6 +30,7 @@ void rt_ios_gyro_start(int on_by_default) {
     CMMotionManager *motion = [CMMotionManager new];
     if (!motion.deviceMotionAvailable) { fprintf(stderr, "[ios] gyroscope : pas de capteur (simulateur ?)\n"); return; }
     rt_gyro_params_from_env(&gyro_params);
+    gyro_params.screen_by_gravity = rt_ios_is_iphone_duo();   // ses axes ne suivent pas l'écran comme ailleurs
     gyro_queue = [NSOperationQueue new];
     gyro_queue.name = @"p2.gyro";
     gyro_queue.maxConcurrentOperationCount = 1;

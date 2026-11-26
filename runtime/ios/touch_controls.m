@@ -543,19 +543,17 @@ static const CFTimeInterval kQuickLoadHold = 0.5;
 }
 
 // ---- disposition (points, dans la zone sûre) ----
-// Marges minimales (points) sur les appareils aux coins arrondis, reconnus à leur
-// barre d'accueil (zone sûre du bas non nulle) : l'iPhone Duo ne déclare aucun
-// écart sur les côtés ni en haut en paysage ; sans plancher, la pause, le mode de la
-// caméra et le compteur d'images, posés à quelques points du bord, sont rognés par
-// les coins. Les iPhone à encoche gardent leur zone sûre (59 pt sur les côtés) ; ceux
-// à coins droits (SE) ne changent pas.
+// Marges minimales (points) sur l'iPhone Duo seulement : il ne déclare aucun écart sur les côtés
+// ni en haut en paysage ; sans plancher, la pause, le mode de la caméra et le compteur d'images,
+// posés à quelques points du bord, sont rognés par les coins. Les autres appareils (iPhone, iPad)
+// gardent leur zone sûre, comme avant.
 static const CGFloat kMinSideInset = 28, kMinVerticalInset = 20;
 // Moitié basse du portrait coupé en deux : son bord haut est au milieu de l'écran (pas de coin
 // à éviter), et ses coins du bas sont couverts par les 34 pt de la barre d'accueil.
 static const CGFloat kSplitSideInset = 20;
 - (CGRect)area {
     UIEdgeInsets safe = self.safeAreaInsets;
-    if (safe.bottom > 0) {
+    if (safe.bottom > 0 && rt_ios_is_iphone_duo()) {
         CGFloat side = splitLayout ? kSplitSideInset : kMinSideInset;
         safe.left = MAX(safe.left, side); safe.right = MAX(safe.right, side);
         safe.top = splitLayout ? safe.top : MAX(safe.top, kMinVerticalInset);
@@ -834,7 +832,7 @@ static void backtap_touches(NSSet<UITouch *> *touches) {
     UIEdgeInsets safe = self.safeAreaInsets;   // journal : ce que l'appareil déclare vraiment (Duo)
     fprintf(stderr, "[ios] zone sûre haut %.0f gauche %.0f bas %.0f droite %.0f, vue %.0fx%.0f points, orientation %ld%s\n",
             safe.top, safe.left, safe.bottom, safe.right, self.bounds.size.width, self.bounds.size.height,
-            (long)self.window.windowScene.interfaceOrientation, safe.bottom > 0 ? ", marges minimales" : "");
+            (long)self.window.windowScene.interfaceOrientation, safe.bottom > 0 && rt_ios_is_iphone_duo() ? ", marges minimales" : "");
     [self invalidateLayout];
 }
 

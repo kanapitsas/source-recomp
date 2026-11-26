@@ -23,6 +23,9 @@ typedef void (*read_pixels_fn)(int, int, int, int, unsigned, unsigned, void *);
 typedef const unsigned char *(*get_string_fn)(unsigned);
 typedef void (*viewport_fn)(int, int, int, int);
 
+// scene_ios.m rafraîchit les commandes tactiles du jeu (touch_controls.m), que la sonde n'a pas.
+void rt_ios_touch_controls_rehost(void) {}
+
 static void *gles;
 static void *gles_proc(const char *name) { return dlsym(gles, name); }
 static int fb_w, fb_h;

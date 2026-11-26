@@ -24,6 +24,8 @@ typedef struct {
     int lateral_sign;    // tape latérale : 1 convention supposée, -1 inversée, 0 désactivée
     int invert;          // 1 : gauche et droite permutées (réglage du joueur)
     int mirror;          // 1 : sens physique inversé par l'appareil (iPhone Duo, d'après son capteur), en plus de invert
+    int screen_by_gravity; // 1 : bord du bas de l'écran lu dans la gravité (iPhone Duo, dont les axes varient selon l'écran) ;
+                         // 0 : orientation de l'interface d'abord, comme avant le Duo
     int z_sign;          // 0 : indifférent ; ±1 : signe exigé de a_z au départ du pic
     float refractory;    // s : rien après un candidat pendant ce délai
     float touch_guard;   // s : rien à moins de ce délai d'un début ou d'une fin de toucher

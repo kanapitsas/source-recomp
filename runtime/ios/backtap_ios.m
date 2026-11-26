@@ -207,6 +207,8 @@ void rt_ios_backtap_start(void) {
     // Sur l'iPhone Duo, le sens physique donne la gauche et la droite permutées (réglé sur l'appareil,
     // portrait et paysage) : on corrige ici, sans toucher au réglage « Permuter » du joueur.
     p.mirror = rt_ios_is_iphone_duo();
+    // Ses axes ne suivent pas l'écran comme sur les autres iPhone : on lit l'écran dans la gravité.
+    p.screen_by_gravity = p.mirror;
     backtap_log = rt_ios_env_flag("P2_BACKTAP_LOG", 0);
     backtap_hold = rt_ios_env_float("P2_BACKTAP_HOLD", 0.05f, 0);
     const char *raw = getenv("P2_BACKTAP_RAW");

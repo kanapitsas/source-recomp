@@ -6,6 +6,7 @@
 typedef struct {
     double counts_per_rad;   // comptes de souris par radian tourné (vitesse)
     double tighten;          // rad/s : sous ce seuil, la rotation est atténuée (tremblement de la main)
+    int screen_by_gravity;   // 1 : axe horizontal de l'écran lu dans la gravité (iPhone Duo) ; 0 : orientation de l'interface
 } rt_gyro_params;
 
 // Comptes de souris par radian à « Normal » : 1,5 fois le mouvement réel à la

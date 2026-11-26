@@ -91,12 +91,21 @@ void rt_ios_touch_controls_rehost(void);       // touch_controls.m
     if (![scene isKindOfClass:UIWindowScene.class]) return;
     connected = (UIWindowScene *)scene;
     record_scene(connected);
-    [UIDevice.currentDevice beginGeneratingDeviceOrientationNotifications];
     bootstrap_allows_portrait = wide_phone_display(connected);
-    bootstrap_window = [[UIWindow alloc] initWithWindowScene:connected];
-    bootstrap_window.rootViewController = [P2LandscapeController new];
-    bootstrap_window.backgroundColor = UIColor.blackColor;
-    [bootstrap_window makeKeyAndVisible];
+    if (tracked_window) {
+        // Reconnexion après sceneDidDisconnect : la fenêtre de SDL existe déjà (rt_ios_scene_adopt ne
+        // repasse pas), elle suit la nouvelle scène, avec la fenêtre des commandes, au lieu d'une
+        // fenêtre noire que personne ne remplacerait.
+        tracked_window.windowScene = connected;
+        [tracked_window makeKeyAndVisible];
+        apply_layout();
+    } else {
+        bootstrap_window.hidden = YES;   // une scène précédente déconnectée avant l'arrivée de SDL
+        bootstrap_window = [[UIWindow alloc] initWithWindowScene:connected];
+        bootstrap_window.rootViewController = [P2LandscapeController new];
+        bootstrap_window.backgroundColor = UIColor.blackColor;
+        [bootstrap_window makeKeyAndVisible];
+    }
     if (!bootstrap_allows_portrait) request_orientations(connected, UIInterfaceOrientationMaskLandscape);
     CGRect bounds = connected.coordinateSpace.bounds;
     fprintf(stderr, "[ios] scène connectée : %.0fx%.0f points, échelle %.2f\n", bounds.size.width, bounds.size.height,

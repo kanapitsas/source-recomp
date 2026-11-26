@@ -7,7 +7,8 @@ thresholds. Two paths: acceleration (0.10 g, 6 g/s) or gyroscope (0.06 g,
 6 g/s, 0.30 rad/s rotation, phone still just before); on the left, the index finger rotates the phone
 (0.4 to 0.7 rad/s) while barely accelerating it (0.07 to 0.10 g).
 Side: score = 0.5 × brief rotation around the device's x axis (vertical in
-landscape, relative to the screen orientation, or to gravity as a fallback) + rotation
+landscape, relative to the screen orientation, or to gravity as a fallback; on an iPhone Duo
+the screen's vertical axis is read from gravity, see [iOS](ios.md)) + rotation
 around z relative to the screen (the tapping hand pivots the phone within its
 own plane: to the left, z > 0, for a left tap, in both landscape
 orientations); 79/79 labeled taps, versus 72/79 with x alone (taps near a
