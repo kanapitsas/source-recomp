@@ -57,7 +57,7 @@ missing root. Please report it with the log.
   OpenGL gets 81 (2560×1440, MSAA 4×;
   [measurements](STATUS.md#measurements)).
 - **iPhone**: touch controls and portals fired by **tapping the back of the
-  phone**.
+  phone** near its left or right edge.
 - **Controllers**: work on Mac and iPhone (tested with an 8BitDo SN30 Pro).
   On Mac, turn Steam Input off for Portal 2.
 - **Co-op** over the local network: a Mac hosts, an iPhone or a second copy
@@ -93,7 +93,8 @@ Contributed in #31. [Full details](#portal-experimental).
   Linux binaries (depot 404). The `save` crash of #44 is fixed in the
   recompiler and checked in Half-Life 2, not confirmed in Portal yet.
 - **iPhone**: a user played up to chamber 16 on an iPhone 18 Pro at a steady
-  60 fps without a crash (#53); back taps were not reliable there. Our own
+  60 fps without a crash (#53); back taps missed in the middle of the back and
+  worked near the edges. Our own
   test is a short session only (menu and touch layout).
 
 ### All games
