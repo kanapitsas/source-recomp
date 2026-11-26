@@ -14,7 +14,7 @@
 // de 35 % de son maximum 50 à 100 ms.
 // rot_z : rotation autour de z (rad/s), dans le repère de l'écran (> 0 : vers la
 // gauche) ; la main qui tape fait pivoter le téléphone dans son plan.
-typedef struct { double t; int ry; int axis; float accel, rot, ring, ring_tau, rot_z; } Tap;
+typedef struct { double t; int ry; int axis; float accel, rot, ring, ring_tau, rot_z; int rx; } Tap;
 typedef struct {
     double rate, length;
     Tap taps[4]; int ntaps;
@@ -57,6 +57,7 @@ static Outcome play(const Scene *sc) {
             s.a[p->axis] -= push;
             float shape = x < 0 ? 0 : (float)(x < 0.005 ? x / 0.005 : exp(-(x - 0.005) / 0.030));
             s.w[0] += p->ry * p->rot * shape;
+            s.w[1] -= p->rx * p->rot * shape;   // portrait : position selon x, couple autour de y
             s.w[2] += p->rot_z * shape;
         }
         double u = t - 100;
@@ -90,7 +91,7 @@ static Outcome play(const Scene *sc) {
 static Scene scene(double rate) {
     Scene sc; memset(&sc, 0, sizeof(sc));
     sc.rate = rate; sc.length = 2.5; sc.noise = 0.005f; sc.orient = 1; sc.active = 1;
-    sc.gravity[0] = -0.8f; sc.gravity[2] = -0.6f;   // paysage, incliné en arrière
+    sc.gravity[0] = 0.8f; sc.gravity[2] = -0.6f;   // paysage gauche (orient = 1 : gravité vers +x), incliné en arrière
     sc.shake_from = sc.shake_to = -1;
     rt_backtap_defaults(&sc.params);
     return sc;
@@ -98,7 +99,7 @@ static Scene scene(double rate) {
 // Tape au dos du côté gauche (-1) ou droit (+1) de l'écran ; orient : +1 si
 // l'axe y de l'appareil pointe vers la droite de l'écran.
 static void back_tap(Scene *sc, double t, int screen_side) {
-    sc->taps[sc->ntaps++] = (Tap){t, screen_side * sc->orient, 2, 0.3f, 0.4f, 0, 0, 0};
+    sc->taps[sc->ntaps++] = (Tap){t, screen_side * sc->orient, 2, 0.3f, 0.4f, 0, 0, 0, 0};
 }
 static const double kRates[] = {100, 200};
 
@@ -106,7 +107,7 @@ RT_CHECK(backtap_left_and_right_back_taps_pick_their_side) {
     for (int r = 0; r < 2; ++r)
         for (int orient = -1; orient <= 1; orient += 2)
             for (int side = -1; side <= 1; side += 2) {
-                Scene sc = scene(kRates[r]); sc.orient = orient;
+                Scene sc = scene(kRates[r]); sc.orient = orient; sc.gravity[0] = 0.8f * (float)orient;
                 back_tap(&sc, 1.0, side);
                 Outcome o = play(&sc);
                 assert(o.reports == 1 && o.accepted == 1);
@@ -117,11 +118,98 @@ RT_CHECK(backtap_left_and_right_back_taps_pick_their_side) {
 // Tape près d'un coin (26/10, téléphone retourné) : la rotation autour de x
 // est faible et de signe trompeur, celle autour de z (la main qui tape fait
 // pivoter le téléphone) donne le côté.
-RT_CHECK(backtap_corner_tap_side_from_screen_plane_rotation) {
+// Portrait, téléphone droit (axe x vers la droite de l'écran, gravité selon -y) : la position
+// de la tape selon x donne le couple autour de y ; l'orientation vient de l'écran ou de la gravité.
+static Scene portrait_scene(double rate) {
+    Scene sc = scene(rate);
+    sc.orient = RT_BACKTAP_PORTRAIT;
+    sc.gravity[0] = 0; sc.gravity[1] = -0.8f; sc.gravity[2] = -0.6f;
+    sc.params.screen_by_gravity = 1;   // le portrait n'existe que sur l'iPhone Duo
+    return sc;
+}
+RT_CHECK(backtap_portrait_left_and_right_back_taps_pick_their_side) {
+    for (int r = 0; r < 2; ++r)
+        for (int known = 0; known <= 1; ++known)
+            for (int side = -1; side <= 1; side += 2) {
+                Scene sc = portrait_scene(kRates[r]);
+                if (!known) sc.orient = 0;   // déduite de la gravité
+                sc.taps[sc.ntaps++] = (Tap){1.0, 0, 2, 0.3f, 0.4f, 0, 0, 0, side};
+                Outcome o = play(&sc);
+                assert(o.reports == 1 && o.accepted == 1);
+                assert(o.side[0] == side && !strcmp(o.method[0], "rotation"));
+            }
+}
+RT_CHECK(backtap_portrait_corner_tap_and_edge_tap) {
+    for (int side = -1; side <= 1; side += 2) {
+        // Près d'un coin : rotation autour de y faible et trompeuse, la rotation dans le plan décide.
+        Scene sc = portrait_scene(100);
+        sc.taps[sc.ntaps++] = (Tap){1.0, 0, 2, 0.3f, -0.12f * side, 0, 0, -0.2f * (float)side, side};
+        Outcome o = play(&sc);
+        assert(o.accepted == 1 && o.side[0] == side);
+    }
+    // Tranche gauche : poussée physique vers la droite (+x), accélération latérale selon x.
+    Scene sc = portrait_scene(100);
+    sc.taps[sc.ntaps++] = (Tap){1.0, 0, 0, 0.3f, 0, 0, 0, 0, 0};
+    Outcome o = play(&sc);
+    assert(o.accepted == 1 && o.side[0] == -1 && !strcmp(o.method[0], "latéral"));
+}
+
+// Le côté se lit dans le plan de l'écran, avec la gravité : l'orientation passée n'y change rien tant
+// que le téléphone n'est pas à plat (iPhone Duo : axes de l'appareil posés autrement qu'un iPhone).
+RT_CHECK(backtap_side_does_not_depend_on_the_orientation_given_when_not_flat) {
+    for (int orient = -1; orient <= RT_BACKTAP_PORTRAIT; ++orient)
+        for (int side = -1; side <= 1; side += 2) {
+            Scene sc = scene(100);
+            sc.params.screen_by_gravity = 1;
+            back_tap(&sc, 1.0, side);   // physique du paysage gauche (gravité +x)
+            sc.orient = orient;
+            Outcome o = play(&sc);
+            assert(o.accepted == 1 && o.side[0] == side);
+        }
+}
+
+// Hors iPhone Duo (screen_by_gravity = 0), l'orientation de l'interface décide, comme avant le Duo :
+// couché sur le côté, la gravité tire vers le côté de l'écran (axe y) alors que le jeu reste en paysage ;
+// elle ne doit pas être prise pour le bas de l'écran (même côté lu quelle que soit la tape).
+RT_CHECK(backtap_without_screen_by_gravity_the_interface_orientation_decides) {
     for (int r = 0; r < 2; ++r)
         for (int orient = -1; orient <= 1; orient += 2)
             for (int side = -1; side <= 1; side += 2) {
                 Scene sc = scene(kRates[r]); sc.orient = orient;
+                sc.gravity[0] = 0.1f * (float)orient; sc.gravity[1] = -0.8f; sc.gravity[2] = -0.5f;   // sur le côté
+                back_tap(&sc, 1.0, side);
+                Outcome o = play(&sc);
+                assert(o.accepted == 1 && o.side[0] == side && !strcmp(o.method[0], "rotation"));
+            }
+    // Un téléphone droit sans orientation d'interface connue reste « inconnu » : pas de déduction par la gravité.
+    Scene sc = scene(100); sc.orient = 0;
+    sc.gravity[0] = 0; sc.gravity[1] = -0.8f; sc.gravity[2] = -0.6f;
+    back_tap(&sc, 1.0, 1);
+    Outcome o = play(&sc);
+    assert(o.accepted == 0 && !strcmp(o.reject[0], "orientation inconnue"));
+}
+
+// mirror (iPhone Duo) et invert (réglage du joueur) permutent chacun la gauche et la droite ;
+// les deux ensemble reviennent au sens physique, en paysage comme en portrait.
+RT_CHECK(backtap_mirror_and_invert_each_swap_the_sides) {
+    for (int portrait = 0; portrait <= 1; ++portrait)
+        for (int mirror = 0; mirror <= 1; ++mirror)
+            for (int invert = 0; invert <= 1; ++invert)
+                for (int side = -1; side <= 1; side += 2) {
+                    Scene sc = portrait ? portrait_scene(100) : scene(100);
+                    sc.params.mirror = mirror; sc.params.invert = invert;
+                    if (portrait) sc.taps[sc.ntaps++] = (Tap){1.0, 0, 2, 0.3f, 0.4f, 0, 0, 0, side};
+                    else back_tap(&sc, 1.0, side);
+                    Outcome o = play(&sc);
+                    assert(o.accepted == 1 && o.side[0] == (mirror ^ invert ? -side : side));
+                }
+}
+
+RT_CHECK(backtap_corner_tap_side_from_screen_plane_rotation) {
+    for (int r = 0; r < 2; ++r)
+        for (int orient = -1; orient <= 1; orient += 2)
+            for (int side = -1; side <= 1; side += 2) {
+                Scene sc = scene(kRates[r]); sc.orient = orient; sc.gravity[0] = 0.8f * (float)orient;
                 back_tap(&sc, 1.0, side);
                 sc.taps[0].rot = -0.12f;                 // signe opposé au côté
                 sc.taps[0].rot_z = -0.2f * (float)side;  // gauche : z > 0
@@ -150,7 +238,7 @@ RT_CHECK(backtap_side_tap_uses_lateral_acceleration) {
     for (int r = 0; r < 2; ++r) {
         // Tape sur la tranche gauche : poussée physique vers la droite (+y si orient = 1).
         Scene sc = scene(kRates[r]);
-        sc.taps[sc.ntaps++] = (Tap){1.0, 0, 1, 0.3f, 0, 0, 0, 0};
+        sc.taps[sc.ntaps++] = (Tap){1.0, 0, 1, 0.3f, 0, 0, 0, 0, 0};
         Outcome o = play(&sc);
         assert(o.accepted == 1 && o.side[0] == -1 && !strcmp(o.method[0], "latéral"));
         sc.params.lateral_sign = 0;
@@ -193,7 +281,7 @@ RT_CHECK(backtap_tap_after_weak_blip_is_not_hidden) {
     for (int r = 0; r < 2; ++r)
         for (int side = -1; side <= 1; side += 2) {
             Scene sc = scene(kRates[r]);
-            sc.taps[sc.ntaps++] = (Tap){1.0, 1, 2, 0.06f, 0, 0, 0, 0};   // sous accel_min, au-dessus de sa moitié
+            sc.taps[sc.ntaps++] = (Tap){1.0, 1, 2, 0.06f, 0, 0, 0, 0, 0};   // sous accel_min, au-dessus de sa moitié
             back_tap(&sc, 1.06, side);
             Outcome o = play(&sc);
             assert(o.accepted == 1 && o.side[o.reports - 1] == side);
@@ -250,7 +338,7 @@ RT_CHECK(backtap_screen_touch_rejects_nearby_peak) {
     for (int r = 0; r < 2; ++r)
         for (int i = 0; i < 4; ++i) {
             Scene sc = scene(kRates[r]);
-            sc.taps[sc.ntaps++] = (Tap){1.0, 1, 2, -0.3f, 0.4f, 0, 0, 0};   // écran : poussée vers l'arrière
+            sc.taps[sc.ntaps++] = (Tap){1.0, 1, 2, -0.3f, 0.4f, 0, 0, 0, 0};   // écran : poussée vers l'arrière
             sc.touches[sc.ntouch++] = 1.0 + offsets[i];
             Outcome o = play(&sc);
             assert(o.reports == 1 && o.accepted == 0 && !strcmp(o.reject[0], "toucher à l'écran"));
@@ -338,7 +426,7 @@ RT_CHECK(backtap_motion_rejects) {
 // Candidats sous les seuils : signalés (journal), sans période réfractaire.
 RT_CHECK(backtap_weak_candidates_only_logged) {
     Scene sc = scene(200);
-    sc.taps[sc.ntaps++] = (Tap){1.0, 1, 2, 0.04f, 0.4f, 0, 0, 0};
+    sc.taps[sc.ntaps++] = (Tap){1.0, 1, 2, 0.04f, 0.4f, 0, 0, 0, 0};
     sc.params.onset_factor = 1;
     Outcome o = play(&sc);
     assert(o.reports == 0);
@@ -375,6 +463,21 @@ RT_CHECK(backtap_light_tap_found_by_gyroscope) {
             o = play(&sc);
             assert(o.accepted == 1);
             for (int i = 0; i < o.reports && i < 8; ++i) if (!o.reject[i]) assert(o.side[i] == side);
+        }
+}
+
+// Voie gyroscope en portrait (iPhone Duo) : la rotation qui compte est celle autour de l'axe vertical de
+// l'écran (y), pas autour de x ; une tape légère qui tourne surtout autour de y n'est pas manquée.
+RT_CHECK(backtap_light_tap_found_by_gyroscope_in_portrait) {
+    for (int r = 0; r < 2; ++r)
+        for (int side = -1; side <= 1; side += 2) {
+            Scene sc = portrait_scene(kRates[r]);
+            sc.taps[sc.ntaps++] = (Tap){1.0, 0, 2, 0.07f, 0.6f, 0, 0, 0, side};
+            Outcome o = play(&sc);
+            assert(o.reports == 1 && o.accepted == 1 && o.side[0] == side);
+            sc.taps[0].rot = 0.15f;   // sans rotation franche : trop faible
+            o = play(&sc);
+            assert(o.accepted == 0);
         }
 }
 
@@ -415,6 +518,13 @@ RT_CHECK(backtap_params_from_env_bounds) {
     assert(fabsf(p.accel_min - 0.3f) < 1e-6f && p.jerk_min == 0);
     assert(p.rot_min == def.rot_min && fabsf(p.gyro_rot_min - def.gyro_rot_min / 2) < 1e-6f);
     assert(p.flat_z == def.flat_z && p.touch_guard == def.touch_guard);
+
+    // Sens physique par défaut ; P2_BACKTAP_INVERT=1 permute ; mirror (iPhone Duo) ne vient pas de l'environnement.
+    assert(def.invert == 0 && def.mirror == 0);
+    setenv("P2_BACKTAP_INVERT", "1", 1);
+    rt_backtap_params_from_env(&p);
+    assert(p.invert == 1 && p.mirror == 0);
+    unsetenv("P2_BACKTAP_INVERT");
 
     // Signes : > 0, < 0 ou 0 ; absent : valeur par défaut.
     setenv("P2_BACKTAP_LATERAL", "-3", 1);

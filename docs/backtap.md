@@ -7,7 +7,8 @@ thresholds. Two paths: acceleration (0.10 g, 6 g/s) or gyroscope (0.06 g,
 6 g/s, 0.30 rad/s rotation, phone still just before); on the left, the index finger rotates the phone
 (0.4 to 0.7 rad/s) while barely accelerating it (0.07 to 0.10 g).
 Side: score = 0.5 × brief rotation around the device's x axis (vertical in
-landscape, relative to the screen orientation, or to gravity as a fallback) + rotation
+landscape, relative to the screen orientation, or to gravity as a fallback; on an iPhone Duo
+the screen's vertical axis is read from gravity, see [iOS](ios.md)) + rotation
 around z relative to the screen (the tapping hand pivots the phone within its
 own plane: to the left, z > 0, for a left tap, in both landscape
 orientations); 79/79 labeled taps, versus 72/79 with x alone (taps near a
@@ -119,7 +120,7 @@ build/backtap-replay <recording>` builds the same file from a raw recording
 | `P2_BACKTAP_WIDTH` | 0.12 s | maximum peak duration (above 35% of its maximum; measured over 100 ms, so inactive by default) |
 | `P2_BACKTAP_AGITATION` | 0.05 g | maximum RMS over the preceding 300 ms (excluding vibration from taps) |
 | `P2_BACKTAP_GRAVITY` | 0.12 g | maximum change in gravity over the preceding 200 ms |
-| `P2_BACKTAP_INVERT` | 0 | `1`: left and right swapped |
+| `P2_BACKTAP_INVERT` | 0 | `1`: left and right swapped (on top of the correction the app applies by itself on an iPhone Duo) |
 | `P2_BACKTAP_LATERAL` | 1 | tap on the edge of the phone: `-1` reversed direction, `0` ignored |
 | `P2_BACKTAP_ZSIGN` | 0 | `±1`: requires this sign of a_z at the start of the peak (back vs. screen) |
 | `P2_BACKTAP_HOLD` | 0.05 s | press duration |

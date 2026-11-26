@@ -82,6 +82,13 @@ def main():
     d3d9metal = d3d9metal_library(args.d3d9metal, args.target, config)
     sdk = subprocess.run(['xcrun', '--sdk', target['sdk'], '--show-sdk-path'], check=True,
                          capture_output=True, text=True).stdout.strip()
+    # SDK 27.1+ : un SDK plus ancien met l'app en mode de compatibilité sur l'iPhone Duo
+    # (écran annoncé à 667×375 points, bandes noires). L'app reste utilisable ailleurs.
+    sdk_version = subprocess.run(['xcrun', '--sdk', target['sdk'], '--show-sdk-version'], check=True,
+                                 capture_output=True, text=True).stdout.strip()
+    if tuple(int(n) for n in sdk_version.split('.')[:2]) < (27, 1):
+        print(f"attention : SDK {target['sdk']} {sdk_version} (< 27.1) : l'iPhone Duo affichera l'app dans un "
+              "cadre de compatibilité ; Xcode 27.1 ou plus pour la prendre en charge.", file=sys.stderr)
     started = time.time()
     layout = json.loads(args.layout.read_text())
     manifest, _ = build_game.generate(args.layout, layout, build_game.roots(layout, game['roots']), build_dir / 'gen',
@@ -121,9 +128,8 @@ def main():
     frameworks = FRAMEWORKS + (D3D9METAL_FRAMEWORKS if d3d9metal else [])
     link = ['clang', *base, f'@{response}', *libs, *([str(d3d9metal)] if d3d9metal else []), '-liconv',
             *[x for f in frameworks for x in ('-framework', f)],
-            # Le SDK 27 impose UIScene, que SDL2 ignore : déclarer un SDK 18
-            # garde le cycle de vie classique d'UIKit (voir ios/probe).
-            f'-Wl,-platform_version,{target["platform"]},17.0,18.0',
+            # Lié au SDK courant (27.1+) : un SDK plus ancien met l'app en mode de compatibilité
+            # sur l'iPhone Duo (1334×750 points, bandes noires). UIScene : runtime/ios/scene_ios.m.
             '-o', str(app / game['ios_executable'])]
     subprocess.run(link, check=True)
     plist = (ROOT / 'ios/Info.plist.in').read_text()

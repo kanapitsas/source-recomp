@@ -72,6 +72,8 @@ void rt_backtap_defaults(rt_backtap_params *p) {
     p->lateral_ratio = 0.7f;  // repli latéral seulement si y porte 70 % du pic
     p->lateral_sign = 1;
     p->invert = 0;
+    p->mirror = 0;            // posé par l'app sur l'iPhone Duo (backtap_ios.m), pas par l'environnement
+    p->screen_by_gravity = 0; // idem : les autres iPhone gardent la lecture d'avant (orientation de l'interface)
     p->z_sign = 0;            // à fixer après calibration : dos et écran poussent en sens opposés
     p->refractory = 0.25f;    // 4 tapes/s au plus ; couvre les rebonds de la main
     p->touch_guard = 0.08f;   // ±80 ms autour d'un début ou d'une fin de toucher
@@ -123,6 +125,15 @@ void rt_backtap_touch(rt_backtap *d, double t) {
 }
 
 static float norm3(const float *v) { return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
+// Bord du bas de l'écran dans le repère de l'appareil, d'après la gravité : (dx, dy) unitaire dans le plan xy.
+// Faux (et (1, 0), l'axe x, en paysage) hors iPhone Duo, ou quasi à plat où ce bord n'est plus défini.
+static int screen_down(const rt_backtap_params *p, const float *g, float *dx, float *dy) {
+    const float plane = hypotf(g[0], g[1]), n = norm3(g);
+    *dx = 1; *dy = 0;
+    if (!p->screen_by_gravity || plane < 0.35f * n || n <= 0.3f) return 0;
+    *dx = g[0] / plane; *dy = g[1] / plane;
+    return 1;
+}
 static double delay_of(const rt_backtap_params *p) { return fmax(0.100, p->touch_guard + 0.020); }
 static const rt_backtap_sample *at(const rt_backtap *d, unsigned long i) { return &d->ring[i % RT_BACKTAP_RING]; }
 
@@ -207,7 +218,11 @@ static void judge(rt_backtap *d, int orient, int active, rt_backtap_report *r) {
 
     // Orientation : écran d'abord, gravité à défaut.
     r->orient = orient;
-    if (!r->orient && g_now && fabsf(g_now->g[0]) >= 0.3f) r->orient = g_now->g[0] > 0 ? 1 : -1;
+    if (!r->orient && g_now) {
+        if (fabsf(g_now->g[0]) >= 0.3f) r->orient = g_now->g[0] > 0 ? 1 : -1;
+        else if (p->screen_by_gravity && g_now->g[1] <= -0.7f) r->orient = RT_BACKTAP_PORTRAIT;   // droit : la gravité tire vers -y
+    }
+    const int portrait = r->orient == RT_BACKTAP_PORTRAIT;
 
     // Côté, dans le repère de l'appareil (+1 : vers +y), puis de l'écran.
     // Rotation autour de x (couple de la poussée) pondérée par side_x_weight,
@@ -217,17 +232,44 @@ static void judge(rt_backtap *d, int orient, int active, rt_backtap_report *r) {
     // 79, 0,5 x + z 79 ; x seul se trompait sur les tapes près d'un coin.
     // Écarts maximaux : l'intégrale du premier lobe ou l'écart à la rotation
     // juste avant l'impact inversaient des séries entières.
-    r->side_score = p->side_x_weight * r->rot[0] - (float)r->orient * r->rot[2];
-    if (fabsf(r->side_score) >= p->rot_min) {
-        r->side = r->side_score > 0 ? 1 : -1; r->method = "rotation";
-    } else if (p->lateral_sign && r->peak > 0 && fabsf(r->acc[1]) >= p->lateral_ratio * r->peak) {
-        // Poussée physique vers +y (a_y CoreMotion < 0) : tape venue du côté -y.
-        r->side = (r->acc[1] > 0 ? 1 : -1) * p->lateral_sign; r->method = "latéral";
+    // Le côté se lit dans le plan de l'écran. La gravité projetée dans ce plan (xy) pointe vers le bord
+    // du bas de l'écran ; la droite en est le quart de tour (-gy, gx) autour de z. Le couple de la
+    // poussée tourne le téléphone autour de l'axe vertical de l'écran (r × F = (ry·F, -rx·F, 0)), et
+    // la main qui tape le fait aussi pivoter dans le plan de l'écran, dans le même sens quelle que
+    // soit l'orientation. Cela ne suppose rien sur la façon dont les axes de l'appareil sont posés
+    // par rapport à l'écran (iPhone Duo : paysage, portrait) ; quasi à plat, le bord du bas n'est
+    // plus défini : on retombe sur l'orientation de l'interface (y en paysage, signé ; x en portrait).
+    // Seulement si screen_by_gravity (iPhone Duo). Ailleurs, couché sur le côté, la gravité tire vers
+    // le côté de l'écran alors que l'interface reste en paysage : elle prendrait ce côté pour le bas
+    // et lirait le côté de la tape sur le mauvais axe. Les autres iPhone gardent l'orientation de l'interface.
+    float dx = 1, dy = 0;   // bord du bas de l'écran, dans le repère de l'appareil (x : repli, comme avant le Duo)
+    const int by_gravity = g_now && screen_down(p, g_now->g, &dx, &dy);
+    const float flip = (p->invert ? -1.0f : 1.0f) * (p->mirror ? -1.0f : 1.0f);
+    if (by_gravity) {
+        // > 0 : vers la droite de l'écran.
+        r->side_score = p->side_x_weight * (r->rot[0] * dx + r->rot[1] * dy) - r->rot[2];
+        float along = r->acc[0] * -dy + r->acc[1] * dx;
+        if (fabsf(r->side_score) >= p->rot_min) {
+            r->side = r->side_score > 0 ? 1 : -1; r->method = "rotation";
+        } else if (p->lateral_sign && r->peak > 0 && fabsf(along) >= p->lateral_ratio * r->peak) {
+            // Poussée physique vers la droite (a CoreMotion < 0) : tape venue du côté gauche.
+            r->side = (along > 0 ? 1 : -1) * p->lateral_sign; r->method = "latéral";
+        }
+        r->side = (int)(r->side * flip);
+    } else {
+        const int axis = portrait ? 0 : 1;   // axe de l'appareil le long de l'horizontale de l'écran
+        r->side_score = portrait ? -p->side_x_weight * r->rot[1] - r->rot[2]
+                                 : p->side_x_weight * r->rot[0] - (float)r->orient * r->rot[2];
+        if (fabsf(r->side_score) >= p->rot_min) {
+            r->side = r->side_score > 0 ? 1 : -1; r->method = "rotation";
+        } else if (p->lateral_sign && r->peak > 0 && fabsf(r->acc[axis]) >= p->lateral_ratio * r->peak) {
+            r->side = (r->acc[axis] > 0 ? 1 : -1) * p->lateral_sign; r->method = "latéral";
+        }
+        r->side = (int)(r->side * (portrait ? 1 : r->orient) * flip);
     }
-    r->side *= r->orient * (p->invert ? -1 : 1);
 
     int by_accel = r->peak >= p->accel_min && r->jerk >= p->jerk_min;
-    int by_gyro = r->peak >= p->gyro_accel_min && r->jerk >= p->jerk_min && fabsf(r->rot[0]) >= p->gyro_rot_min &&
+    int by_gyro = r->peak >= p->gyro_accel_min && r->jerk >= p->jerk_min && fabsf(r->rot[0] * dx + r->rot[1] * dy) >= p->gyro_rot_min &&
                   r->tail_rms <= p->gyro_calm_max;
     r->weak = !by_accel && !by_gyro;
     r->gyro = !by_accel && by_gyro;
@@ -244,7 +286,7 @@ static void judge(rt_backtap *d, int orient, int active, rt_backtap_report *r) {
     else if (g_now && g_now->g[2] < p->flat_z) r->reject = "téléphone à plat";
     else if (r->width > p->max_width) r->reject = "pic trop long";
     else if (p->z_sign && (onset_az > 0 ? 1 : -1) != p->z_sign) r->reject = "sens z";
-    else if (!r->orient) r->reject = "orientation inconnue";
+    else if (!by_gravity && !r->orient) r->reject = "orientation inconnue";
     else if (!r->side) r->reject = "côté indécis";
     if (r->reject) r->side = 0;
 }
@@ -262,7 +304,11 @@ int rt_backtap_feed(rt_backtap *d, const rt_backtap_sample *s, int orient, int a
         double dt = s->t - prev->t;
         if (s->t >= d->refractory_until && dt > 0 && dt <= 0.1) {
             float da[3] = {s->a[0] - prev->a[0], s->a[1] - prev->a[1], s->a[2] - prev->a[2]};
-            float m = norm3(s->a), jerk = norm3(da) / (float)dt, wjerk = fabsf(s->w[0] - prev->w[0]) / (float)dt;
+            float m = norm3(s->a), jerk = norm3(da) / (float)dt, wjerk;
+            {   // rotation autour de l'axe vertical de l'écran (x en paysage ; y en portrait sur le Duo)
+                float ux, uy; screen_down(&d->p, s->g, &ux, &uy);
+                wjerk = fabsf((s->w[0] - prev->w[0]) * ux + (s->w[1] - prev->w[1]) * uy) / (float)dt;
+            }
             const rt_backtap_params *p = &d->p;
             int strong = (m >= p->accel_min && jerk >= p->jerk_min) || (m >= p->gyro_accel_min && wjerk >= p->gyro_jerk_min);
             float f = p->onset_factor;

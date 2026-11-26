@@ -5,6 +5,10 @@
 
 // Seuils (unités CoreMotion : g, rad/s, secondes). rt_backtap_defaults donne
 // les valeurs par défaut, expliquées dans back_tap.c.
+// Orientation « portrait, téléphone droit » (grand écran du Duo coupé en deux) : l'axe x de
+// l'appareil pointe vers la droite de l'écran. Avec +1/-1, c'est l'axe y (paysage).
+#define RT_BACKTAP_PORTRAIT 2
+
 typedef struct {
     float accel_min;     // g : accélération utilisateur minimale au pic
     float jerk_min;      // g/s : secousse minimale (variation d'un échantillon au suivant)
@@ -18,7 +22,10 @@ typedef struct {
     float gyro_calm_max;  // g : agitation maximale dans les 50 ms d'avant (une tape légère ne se voit que téléphone immobile)
     float lateral_ratio; // tape latérale : part minimale de l'axe y dans le pic d'accélération
     int lateral_sign;    // tape latérale : 1 convention supposée, -1 inversée, 0 désactivée
-    int invert;          // 1 : gauche et droite permutées
+    int invert;          // 1 : gauche et droite permutées (réglage du joueur)
+    int mirror;          // 1 : sens physique inversé par l'appareil (iPhone Duo, d'après son capteur), en plus de invert
+    int screen_by_gravity; // 1 : bord du bas de l'écran lu dans la gravité (iPhone Duo, dont les axes varient selon l'écran) ;
+                         // 0 : orientation de l'interface d'abord, comme avant le Duo
     int z_sign;          // 0 : indifférent ; ±1 : signe exigé de a_z au départ du pic
     float refractory;    // s : rien après un candidat pendant ce délai
     float touch_guard;   // s : rien à moins de ce délai d'un début ou d'une fin de toucher
@@ -51,7 +58,8 @@ typedef struct {
     float tail_rms;        // g : agitation dans les 50 ms d'avant, vibration de la tape d'avant comprise
     float gravity;         // g : variation de la gravité avant le pic
     double touch_dt;       // s : toucher le plus proche (t_toucher - t), 1e9 si aucun
-    int orient;            // +1 : axe y de l'appareil vers la droite de l'écran, -1 : vers la gauche
+    int orient;            // +1 : axe y de l'appareil vers la droite de l'écran, -1 : vers la gauche,
+                           // RT_BACKTAP_PORTRAIT : axe x vers la droite (téléphone droit)
     int side;              // -1 gauche (portail bleu), +1 droite (orange), 0 aucun
     const char *method;    // "rotation", "latéral" ou NULL
     int gyro;              // retenu par la voie gyroscope seulement
@@ -90,7 +98,7 @@ int rt_backtap_env_sign(const char *name, int def);
 void rt_backtap_init(rt_backtap *d, const rt_backtap_params *p);
 // Début ou fin d'un toucher à l'écran, même horloge que les échantillons.
 void rt_backtap_touch(rt_backtap *d, double t);
-// Un échantillon. orient : +1/-1 (voir rt_backtap_report.orient) ou 0 pour le
-// déduire de la gravité ; active : 0 en menu ou manette masquée. Rend 1 quand
+// Un échantillon. orient : +1/-1/RT_BACKTAP_PORTRAIT (voir rt_backtap_report.orient) ou 0
+// pour le déduire de la gravité ; active : 0 en menu ou manette masquée. Rend 1 quand
 // un candidat vient d'être jugé (bilan dans *r ; tape si r->reject est NULL).
 int rt_backtap_feed(rt_backtap *d, const rt_backtap_sample *s, int orient, int active, rt_backtap_report *r);

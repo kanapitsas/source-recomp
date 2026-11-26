@@ -8,6 +8,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include "gl4esinit.h"
+#include "scene_ios.h"
 #if __has_include(<os/proc.h>)
 #include <os/proc.h>
 #endif
@@ -22,12 +23,16 @@ typedef void (*read_pixels_fn)(int, int, int, int, unsigned, unsigned, void *);
 typedef const unsigned char *(*get_string_fn)(unsigned);
 typedef void (*viewport_fn)(int, int, int, int);
 
+// scene_ios.m rafraîchit les commandes tactiles du jeu (touch_controls.m), que la sonde n'a pas.
+void rt_ios_touch_controls_rehost(void) {}
+
 static void *gles;
 static void *gles_proc(const char *name) { return dlsym(gles, name); }
 static int fb_w, fb_h;
 static void fb_size(int *w, int *h) { *w = fb_w; *h = fb_h; }
 
 int main(int argc, char **argv) {
+    rt_ios_scene_wait(5);   // SDK 27 : la scène avant que SDL ne lise l'écran (runtime/ios/scene_ios.m)
     (void)argc; (void)argv;
     // Sur appareil, sortie dans Documents/probe.log (rapatriée par tools/ios_device.sh).
     if (getenv("P2_PROBE_LOG") && getenv("HOME")) {
@@ -70,6 +75,7 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     SDL_Window *window = SDL_CreateWindow("probe", 0, 0, 640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
+    rt_ios_scene_adopt(window);
     SDL_GLContext context = window ? SDL_GL_CreateContext(window) : NULL;
     if (!context) { printf("probe: GL context failed: %s\n", SDL_GetError()); return 1; }
     SDL_GL_GetDrawableSize(window, &fb_w, &fb_h);

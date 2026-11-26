@@ -45,5 +45,8 @@ typedef struct {
 const rt_touch_button *rt_touch_layout(rt_ios_layout layout, int *count);
 // Abscisse (fraction de la zone sûre) du stick de la caméra au repos.
 double rt_touch_look_rest(rt_ios_layout layout);
+// Abscisse du stick au repos, gauche (déplacement) ou droit (caméra). split : moitié basse du
+// portrait coupé en deux, où les deux sticks sont plus rentrés (le pouce y tient mieux).
+double rt_touch_stick_rest(rt_ios_layout layout, int right, int split);
 // Centre d'un bouton dans la zone (x, y, w, h).
 void rt_touch_place(const rt_touch_button *b, double x, double y, double w, double h, double *cx, double *cy);

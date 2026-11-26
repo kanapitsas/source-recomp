@@ -6,7 +6,7 @@
 #include "../runtime/ios/gyro_aim.c"
 
 static rt_gyro_params gyro_test_params(void) {
-    rt_gyro_params p = {1000, 0.05};
+    rt_gyro_params p = {1000, 0.05, 1};   // screen_by_gravity : comportement de l'iPhone Duo
     return p;
 }
 static void gyro_turn(int orient, const double g[3], const double w[3], double out[2]) {
@@ -32,6 +32,59 @@ RT_CHECK(gyro_yaw_and_pitch_follow_the_phone_in_both_landscapes) {
     assert(out[1] < 0);
     gyro_turn(-1, right_g, (double[3]){0, 1, 0}, out);  // haut de l'écran vers l'avant : regarder en bas
     assert(out[1] > 0);
+}
+
+// Portrait, téléphone droit : gravité selon -y, haut de l'écran = +y, droite de l'écran = +x.
+RT_CHECK(gyro_yaw_and_pitch_follow_the_phone_in_portrait) {
+    double out[2];
+    const double up_g[3] = {0, -1, 0};
+    gyro_turn(RT_BACKTAP_PORTRAIT, up_g, (double[3]){0, 1, 0}, out);    // on tourne sur soi vers la gauche
+    assert(out[0] < 0 && fabs(out[1]) < 1e-9 && fabs(out[0] + 10) < 1e-9);
+    gyro_turn(RT_BACKTAP_PORTRAIT, up_g, (double[3]){1, 0, 0}, out);    // haut de l'écran vers soi : regarder en haut
+    assert(out[1] < 0 && fabs(out[0]) < 1e-9 && fabs(out[1] + 10) < 1e-9);
+    gyro_turn(RT_BACKTAP_PORTRAIT, up_g, (double[3]){-1, 0, 0}, out);   // haut vers l'avant : regarder en bas
+    assert(out[1] > 0);
+    // Incliné en arrière de 45° (écran vers le ciel à moitié) : le lacet suit toujours la verticale.
+    double s = sqrt(0.5);
+    gyro_turn(RT_BACKTAP_PORTRAIT, (double[3]){0, -s, -s}, (double[3]){0, s, s}, out);
+    assert(fabs(out[0] + 10) < 1e-9 && fabs(out[1]) < 1e-9);
+}
+
+// L'axe horizontal de l'écran vient de la gravité : il ne dépend pas de la façon dont les axes de
+// l'appareil sont posés par rapport à l'écran (iPhone Duo : tourner sur soi ne doit pas lever ni
+// baisser la caméra, quelle que soit l'orientation passée).
+// Hors iPhone Duo, l'axe du tangage reste celui de l'orientation de l'interface, comme avant le Duo :
+// quel que soit le côté vers lequel la gravité penche, y (paysage gauche) est l'axe horizontal.
+RT_CHECK(gyro_pitch_axis_follows_the_interface_orientation_without_screen_by_gravity) {
+    rt_gyro_params p = gyro_test_params();
+    p.screen_by_gravity = 0;
+    double out[2];
+    for (int orient = -1; orient <= 1; orient += 2) {
+        const double g[3] = {0.3 * orient, -0.9, -0.3};   // couché sur le côté, un peu en arrière
+        assert(rt_gyro_delta(&p, (double[3]){0, orient, 0}, g, orient, 0.01, out));
+        assert(fabs(out[1] + 10) < 1e-9);                  // 1 rad/s autour de l'axe horizontal de l'écran
+    }
+}
+
+RT_CHECK(gyro_pitch_axis_comes_from_gravity_not_from_the_orientation) {
+    double out[2];
+    for (int orient = -1; orient <= RT_BACKTAP_PORTRAIT; ++orient) {
+        if (!orient) continue;
+        // Repère où l'axe x de l'appareil est vertical (gravité vers +x) : le haut de l'écran est -x.
+        gyro_turn(orient, (double[3]){1, 0, 0}, (double[3]){-1, 0, 0}, out);   // tourner sur soi, vers la gauche
+        assert(out[0] < 0 && fabs(out[1]) < 1e-9);
+        gyro_turn(orient, (double[3]){1, 0, 0}, (double[3]){0, 1, 0}, out);    // haut de l'écran vers soi
+        assert(out[1] < 0 && fabs(out[0]) < 1e-9);
+        // Repère où y est vertical, gravité vers -y (téléphone droit).
+        gyro_turn(orient, (double[3]){0, -1, 0}, (double[3]){0, 1, 0}, out);
+        assert(out[0] < 0 && fabs(out[1]) < 1e-9);
+        gyro_turn(orient, (double[3]){0, -1, 0}, (double[3]){1, 0, 0}, out);
+        assert(out[1] < 0 && fabs(out[0]) < 1e-9);
+    }
+    // Téléphone tenu de travers (roulis de 20 degrés autour de z) : lacet pur reste du lacet.
+    double c = cos(0.35), s = sin(0.35);
+    gyro_turn(RT_BACKTAP_PORTRAIT, (double[3]){-s, -c, 0}, (double[3]){s, c, 0}, out);
+    assert(fabs(out[0] + 10) < 1e-9 && fabs(out[1]) < 1e-9);
 }
 
 RT_CHECK(gyro_yaw_uses_the_real_vertical) {

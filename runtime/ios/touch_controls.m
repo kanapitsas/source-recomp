@@ -57,6 +57,7 @@
 #include "touch_layout.h"
 #include "touch_test.h"
 #include "lifecycle_ios.h"
+#include "scene_ios.h"
 
 int rt_ios_game_ui_visible(void);   // game_state.c
 extern _Atomic unsigned long rt_ios_frames;  // gl_ios.m : images présentées
@@ -216,7 +217,7 @@ static BOOL sensors_wanted(CFTimeInterval *idle_since, BOOL playing, CFTimeInter
 typedef struct { long taps, fixes, reported; CGRect area; int fps, metal, lit; } FpsKey;
 
 @interface P2TouchControls : UIView
-- (instancetype)initWithWindow:(SDL_Window *)window;
+- (instancetype)initWithWindow:(SDL_Window *)window host:(UIView *)hostView;
 @end
 
 @implementation P2TouchControls {
@@ -258,6 +259,8 @@ typedef struct { long taps, fixes, reported; CGRect area; int fps, metal, lit; }
     Button layoutButtons[MAX_BUTTONS];   // disposition des boutons, refaite quand la zone ou le mode change
     int layoutCount;
     BOOL layoutValid;
+    UIView *sdlHost;          // fenêtre UIKit de SDL (hôte hors portrait coupé en deux)
+    BOOL splitLayout;         // portrait sur le grand écran du Duo : commandes dans la moitié basse
     CFTimeInterval quickSaveAt;   // appui sur la sauvegarde rapide en cours (0 : aucun)
     BOOL quickLoaded;             // appui long : chargement rapide déjà envoyé
     BOOL cancelling;              // touchesCancelled : relâchement sans effet (pas de sauvegarde)
@@ -265,9 +268,10 @@ typedef struct { long taps, fixes, reported; CGRect area; int fps, metal, lit; }
     FpsKey fpsKey;            // ce qu'il montre : redessiné seulement quand cela change
 }
 
-- (instancetype)initWithWindow:(SDL_Window *)sdlWindow {
+- (instancetype)initWithWindow:(SDL_Window *)sdlWindow host:(UIView *)hostView {
     if ((self = [super initWithFrame:CGRectZero])) {
         window = sdlWindow;
+        sdlHost = hostView;
         windowID = SDL_GetWindowID(window);
         self.multipleTouchEnabled = YES; self.backgroundColor = UIColor.clearColor; self.opaque = NO;
         fingers = [NSMapTable strongToStrongObjectsMapTable];
@@ -306,10 +310,27 @@ typedef struct { long taps, fixes, reported; CGRect area; int fps, metal, lit; }
     if (any != concealed) { concealed = any; [self setNeedsRender]; }
 }
 
+// Change d'hôte (fenêtre de SDL ou moitié basse du portrait) sans attendre l'image suivante : le
+// moteur peut rester une seconde sur le changement de taille, et les commandes manquaient
+// pendant ce temps. Appelé par scene_ios.m dès que la disposition des fenêtres change.
+- (void)rehost {
+    UIView *target = (__bridge UIView *)rt_ios_scene_controls_view() ?: sdlHost;
+    if (!target) return;
+    if (self.superview != target) { [target addSubview:self]; [self invalidateLayout]; }
+    BOOL split = target != sdlHost;
+    if (split != splitLayout) { splitLayout = split; [self invalidateLayout]; [self releaseAll]; }
+    if (!CGRectEqualToRect(self.frame, target.bounds)) { self.frame = target.bounds; [self invalidateLayout]; }
+    [self renderIfNeeded];
+}
 // À chaque image : rester devant la vue OpenGL de SDL (ajoutée après la
 // fenêtre), suivre la taille de la fenêtre, tourner la caméra.
 - (void)step {
-    UIView *host = self.superview;
+    // Portrait sur le grand écran du Duo : les commandes sont dans la moitié basse, fenêtre
+    // à part (scene_ios.m) ; sinon sur la fenêtre de SDL.
+    UIView *host = (__bridge UIView *)rt_ios_scene_controls_view() ?: sdlHost;
+    if (host && self.superview != host) { [host addSubview:self]; [self invalidateLayout]; }
+    BOOL split = host != sdlHost;
+    if (split != splitLayout) { splitLayout = split; [self invalidateLayout]; [self releaseAll]; }
     CFTimeInterval now = CACurrentMediaTime();
     // App inactive (lifecycle_ios.m, pause servant la boucle d'UIKit) : comme en
     // menu, doigts relâchés et plus aucune entrée envoyée au jeu.
@@ -326,6 +347,14 @@ typedef struct { long taps, fixes, reported; CGRect area; int fps, metal, lit; }
     // Capteurs de mouvement : orientation de l'écran lue une fois par image.
     BOOL playing = !menu && !concealed;   // menu vaut aussi pour l'app quittée
     int orient = rt_ios_backtap_available() || rt_ios_gyro_available() ? [self orientationSign] : 0;
+    {   // Diagnostic : ce que les capteurs voient, à chaque changement (les réglages Gyro et Tapes au dos).
+        static int last_orient = -99, last_playing = -1;
+        if (orient != last_orient || (int)playing != last_playing) {
+            last_orient = orient; last_playing = playing;
+            fprintf(stderr, "[ios] capteurs : orientation %d, en partie %d (menu %d, cachée %d), tapes au dos %s, gyroscope %s\n", orient,
+                    playing, menu, concealed, rt_ios_backtap_available() ? "oui" : "non", rt_ios_gyro_available() ? "oui" : "non");
+        }
+    }
     [self backTapStep:orient playing:playing now:now];
     [self gyroStep:orient playing:playing now:now];
     [self quickSaveStep:now];
@@ -344,10 +373,12 @@ typedef struct { long taps, fixes, reported; CGRect area; int fps, metal, lit; }
         [self lookBy:(float)(x * fabs(x)) * scale y:(float)(-y * fabs(y)) * scale];
     }
 }
-// +1 : axe y de l'appareil vers la droite de l'écran ; -1 : vers la gauche ; 0 : portrait.
+// +1 : axe y de l'appareil vers la droite de l'écran ; -1 : vers la gauche ;
+// RT_BACKTAP_PORTRAIT : téléphone droit (axe x vers la droite) ; 0 : autre (tête en bas).
 - (int)orientationSign {
     UIInterfaceOrientation o = self.window.windowScene.interfaceOrientation;
-    return o == UIInterfaceOrientationLandscapeLeft ? 1 : o == UIInterfaceOrientationLandscapeRight ? -1 : 0;
+    return o == UIInterfaceOrientationLandscapeLeft ? 1 : o == UIInterfaceOrientationLandscapeRight ? -1
+         : o == UIInterfaceOrientationPortrait ? RT_BACKTAP_PORTRAIT : 0;
 }
 // Mouvement de souris relatif, fractions de comptes reportées.
 - (void)lookBy:(float)x y:(float)y {
@@ -512,12 +543,28 @@ static const CFTimeInterval kQuickLoadHold = 0.5;
 }
 
 // ---- disposition (points, dans la zone sûre) ----
-- (CGRect)area { return UIEdgeInsetsInsetRect(self.bounds, self.safeAreaInsets); }
+// Marges minimales (points) sur l'iPhone Duo seulement : il ne déclare aucun écart sur les côtés
+// ni en haut en paysage ; sans plancher, la pause, le mode de la caméra et le compteur d'images,
+// posés à quelques points du bord, sont rognés par les coins. Les autres appareils (iPhone, iPad)
+// gardent leur zone sûre, comme avant.
+static const CGFloat kMinSideInset = 28, kMinVerticalInset = 20;
+// Moitié basse du portrait coupé en deux : son bord haut est au milieu de l'écran (pas de coin
+// à éviter), et ses coins du bas sont couverts par les 34 pt de la barre d'accueil.
+static const CGFloat kSplitSideInset = 20;
+- (CGRect)area {
+    UIEdgeInsets safe = self.safeAreaInsets;
+    if (safe.bottom > 0 && rt_ios_is_iphone_duo()) {
+        CGFloat side = splitLayout ? kSplitSideInset : kMinSideInset;
+        safe.left = MAX(safe.left, side); safe.right = MAX(safe.right, side);
+        safe.top = splitLayout ? safe.top : MAX(safe.top, kMinVerticalInset);
+    }
+    return UIEdgeInsetsInsetRect(self.bounds, safe);
+}
 - (CGFloat)stickRadius { return MIN(66, self.area.size.height * .15); }
 - (CGPoint)restingStick:(BOOL)right {
     CGRect a = self.area;
     // HL2 : stick de la caméra plus au centre, à l'écart de la grappe du tir.
-    CGFloat x = right ? rt_touch_look_rest(rt_ios_current_game()->layout) : .16;
+    CGFloat x = rt_touch_stick_rest(rt_ios_current_game()->layout, right, splitLayout);
     return CGPointMake(CGRectGetMinX(a) + a.size.width * x, CGRectGetMinY(a) + a.size.height * .72);
 }
 // Les tapes au dos tirent les portails : leurs boutons ne servent que sans
@@ -780,7 +827,14 @@ static void backtap_touches(NSSet<UITouch *> *touches) {
     [self touchesEnded:touches withEvent:event];
     cancelling = NO;
 }
-- (void)safeAreaInsetsDidChange { [super safeAreaInsetsDidChange]; [self invalidateLayout]; }
+- (void)safeAreaInsetsDidChange {
+    [super safeAreaInsetsDidChange];
+    UIEdgeInsets safe = self.safeAreaInsets;   // journal : ce que l'appareil déclare vraiment (Duo)
+    fprintf(stderr, "[ios] zone sûre haut %.0f gauche %.0f bas %.0f droite %.0f, vue %.0fx%.0f points, orientation %ld%s\n",
+            safe.top, safe.left, safe.bottom, safe.right, self.bounds.size.width, self.bounds.size.height,
+            (long)self.window.windowScene.interfaceOrientation, safe.bottom > 0 && rt_ios_is_iphone_duo() ? ", marges minimales" : "");
+    [self invalidateLayout];
+}
 
 // ---- dessin ----
 // Compteur d'images : la mesure de runtime/fps_overlay.c (une image par
@@ -969,6 +1023,9 @@ static void set_circle(CAShapeLayer *l, CGFloat diameter) {
 static P2TouchControls *controls;
 
 // Appelé à la création de la fenêtre du jeu (sdl_ios.m), sur le thread principal.
+void rt_ios_touch_controls_rehost(void) {
+    if (controls && [NSThread isMainThread]) [controls rehost];
+}
 void rt_ios_touch_controls_attach(SDL_Window *window) {
     if (controls || !window || !rt_ios_env_flag("P2_TOUCH_CONTROLS", 1)) return;
     SDL_SysWMinfo info;
@@ -981,7 +1038,7 @@ void rt_ios_touch_controls_attach(SDL_Window *window) {
     // OpenGL à la création du contexte, ce qui retirerait une sous-vue posée là.
     UIView *host = info.info.uikit.window;
     if (!host) return;
-    controls = [[P2TouchControls alloc] initWithWindow:window];
+    controls = [[P2TouchControls alloc] initWithWindow:window host:host];
     controls.frame = host.bounds;
     [host addSubview:controls];
 }

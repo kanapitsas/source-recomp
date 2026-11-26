@@ -135,6 +135,134 @@ Replace `YOURTEAMID` with your team ID (Xcode > Settings > Accounts, or the
 of the first Apple Development certificate in the keychain: with several Apple
 accounts in Xcode, set `P2_TEAM_ID` to the one you want.
 
+### SDK, UIScene and the iPhone Duo
+
+The app is linked against the current iOS SDK. The iPhone Duo needs 27.1 or
+newer: `build_ios.py` warns with an older Xcode, and the app still works on other
+devices. An app linked against an older SDK runs in compatibility mode on the Duo:
+the game sees a 667×375-point screen (1334×750 at the default Resolution) with
+black bars. The link used to declare SDK 18 to keep the classic UIKit lifecycle,
+because SDL2 2.30.9 knows nothing about UIScene, which SDK 27 requires. Now:
+
+- `ios/Info.plist.in` declares a scene manifest whose delegate is
+  `P2SceneDelegate` (`runtime/ios/scene_ios.m`), which records the connected
+  `UIWindowScene`;
+- `rt_ios_create_window` (`runtime/ios/sdl_ios.m`) waits for the scene, lets
+  SDL create its window, then sets `windowScene` on the SDL `UIWindow`
+  (`rt_ios_scene_adopt`). Without a scene the window stays detached: black,
+  and in portrait. UIKit then sizes it to the scene. SDL itself is not patched;
+- SDL 2.30.9 reads the screen orientation from `-[UIApplication statusBarOrientation]`,
+  which a scene-based app no longer keeps up to date: it announced the Duo as a
+  portrait display (466×678). `scene_ios.m` overrides it with the scene's
+  orientation (landscape before a scene exists: the app is landscape-only);
+- on the Duo's inner display, `UIScreen.mainScreen`, and so SDL's display, stays
+  the outer display's size (678×466) while the window is 951×669 points. SDL
+  builds its desktop display mode from it and snaps its fullscreen window back to
+  that mode whenever the app returns to the foreground, so the game ended up in a
+  corner of the screen, and the footer buttons of the Options and pause menus
+  (BACK, SELECT, DONE) could not be tapped. `scene_ios.m` makes
+  `mainScreen.bounds` the scene's screen size once a scene is connected (the same
+  size on other devices), and `ios/main_ios.c` waits for the scene before SDL
+  reads the screen.
+
+Folding or unfolding the Duo while the game runs is handled too:
+
+- folding disconnects a `UIScreen`, and SDL's `SDL_DisplayWatch` crashed in
+  `UIKit_DelDisplay` handling it. The app only uses one display, so
+  `rt_ios_create_window` removes SDL's screen connect/disconnect observers
+  (`rt_ios_scene_ignore_screen_changes`);
+- the window and the GL surface follow the scene (UIKit layout), but SDL's desktop
+  display mode keeps its launch size and SDL snaps the fullscreen window back to it
+  when the app returns to the foreground (the game ended up cropped on the outer
+  display after being started on the inner one). `rt_ios_poll_event` calls
+  `rt_ios_scene_resync`, which forces a layout pass whenever SDL's window size and
+  its view's size differ, so SDL sends the real size again.
+
+Portrait on the Duo's inner display works like a two-screen console: the game takes
+the top half of the screen and the touch controls the bottom half, with the same
+buttons as in landscape.
+
+- `Info.plist.in` allows portrait, but SDL only accepts it on a phone display whose
+  short side is at least 500 points (the inner display: 669; other iPhones: 440 at
+  most), through `SDL_HINT_ORIENTATIONS` kept up to date by `scene_ios.m` as the
+  Duo folds and unfolds. `P2_PORTRAIT_SPLIT=0` turns the split off;
+- in portrait, `apply_layout` (`scene_ios.m`, run from `rt_ios_scene_resync`) shrinks
+  the SDL `UIWindow` to the top half (669×475) and puts a second `UIWindow` on the
+  bottom half. `mainScreen.bounds` is the game's half too, so SDL and the engine see a
+  landscape-shaped display of that size and the rotation reaches the engine as an
+  ordinary resize event;
+- the touch controls move into that second window (`rt_ios_scene_controls_view`).
+  Their area has no top inset (it is the middle of the screen) and 20 pt on the
+  sides; both sticks rest 5 % of the width further in than in landscape
+  (`rt_touch_stick_rest`). Back taps and gyro aiming work in portrait. On a Duo (model
+  `iPhone19,4`, logged at startup as `[ios] modèle …`) both read the screen's horizontal axis
+  from gravity instead of assuming how the device axes lie against the screen: gravity
+  projected on the screen plane (device x, y) points to the bottom edge of the screen, and
+  the right is that edge turned a quarter turn around z. The first version assumed an
+  iPhone's axes in portrait (x to the right) and the camera drifted diagonally on the Duo, so
+  nothing here relies on that. The interface orientation (`RT_BACKTAP_PORTRAIT`, y in
+  landscape) is only the fallback when the phone is nearly flat. For back taps the side
+  comes from the rotation about the screen's vertical axis, the push along the horizontal
+  one for edge taps, and the in-plane rotation (the hand makes the phone pivot, the same
+  way in every orientation); the light-tap (gyroscope) path looks at that same vertical
+  axis, not at device x; for gyro, yaw follows the real vertical and pitch is the
+  rotation about the horizontal axis. Other iPhones keep the earlier reading, where the
+  interface orientation decides: lying on one side, gravity points along the screen's
+  side while the game stays in landscape, and a gravity-based reading would take that side
+  for the bottom of the screen and read the tap on the wrong axis
+  (`screen_by_gravity` in `rt_backtap_params` and `rt_gyro_params`, set in `backtap_ios.m` and
+  `gyro_ios.m`, tested in `tests/checks_back_tap.c` and `tests/checks_gyro_aim.c`). The portal buttons follow the usual rule (shown
+  without back taps). Both are covered by synthetic samples (including frames with the
+  axes laid out differently and a phone held crooked) and were tried on a Duo, in portrait
+  and landscape. On the Duo the physical sign gave the opposite portal, so the app mirrors
+  left and right by itself (`rt_backtap_params.mirror`, set in `backtap_ios.m`; other iPhones
+  are unchanged). It is
+  independent of the "Swap left and right" setting, which still flips the result once more
+  on any device. The sensor log (`P2_BACKTAP_LOG=1`) helps if a side is still off;
+- the app follows the orientation iOS gives the scene at launch (it knows how the phone is
+  held, including the Duo's inner display). On the inner display it keeps that choice:
+  landscape, or portrait split in two; the game window is set to the game's half
+  (`rt_ios_scene_adopt` calls `apply_layout`) before the engine creates its surface, so the
+  engine starts at the right size (669x475 in portrait). On other phones the app is
+  landscape-only: the scene is asked for landscape on connect, and `rt_ios_scene_wait` waits
+  for it, since a portrait surface left the game in a corner. The app never reads
+  `UIDevice.orientation` (the body's orientation, not the inner display's: held in the
+  Duo's wide position it says portrait, which rotated the game when a level loaded) and
+  never asks for portrait itself.
+
+Two more Duo details:
+
+- the engine runs fullscreen at the desktop display mode SDL gave it at launch and
+  does not follow later window resizes, so when the window no longer has that size
+  (the top half in portrait, or an inner display opened after a launch on the outer
+  one) its mouse coordinates were off by the ratio: taps on the menus landed beside
+  the buttons. `rt_ios_poll_event`, `rt_ios_get_mouse_state` and
+  `rt_ios_warp_mouse_in_window` (`sdl_ios.m`) now scale by desktop mode ÷ window
+  size (1 when they match, so other devices are unchanged);
+
+- the on-screen keyboard is off (`SDL_HINT_ENABLE_SCREEN_KEYBOARD=0`;
+  `P2_SCREEN_KEYBOARD=1` brings it back). The engine asks for text input and SDL
+  then raised the keyboard, which nothing in the touch controls can dismiss: after
+  starting the app folded and unfolding it, it covered the bottom half of the game.
+  Hardware keyboards are not affected;
+- `apply_layout` always sets the game window to the scene's size (or the top half in
+  portrait). UIKit does not always resize it itself: started folded and then
+  unfolded, the game stayed in a corner at the outer display's size.
+
+The touch controls log the safe-area insets the device reports (`[ios] zone sûre
+…`). The simulator's Duo reports 0 on the sides and top and 34 pt at the bottom
+on the inner display, and 84 pt on the right of the outer display (the camera).
+
+Checked with the game in the iPhone Duo simulator (iOS 27.2), on the inner display
+(951×669 points) and the outer one (678×466): the menus, tapping, a level with the
+touch controls, leaving the app and coming back, and folding and unfolding
+mid-game; in portrait on the inner display: menus, pause from the bottom half,
+rotating back and forth, starting the app and then rotating the phone. The game
+also starts full screen in landscape on an iPhone 16 Pro simulator (iOS 18.4).
+The Duo has two displays; the app follows the one it is on. Also tried on a Duo:
+gyro aiming and back taps in portrait and landscape, and the portrait layout.
+Not checked: the half-open pose.
+
 Saves: `tools/ios_device.sh saves status|pull|push` copies them between the Mac
 and the iPhone over the cable ([details](usage.md#saves-between-mac-and-iphone-portal-2));
 Portal 2 only for now.
@@ -160,6 +288,11 @@ Hidden in menus and when a controller connects (`runtime/ios/touch_layout.c`).
 | bottom left, small | camera mode (stick or trackpad) |
 
 Portals are fired by tapping the back of the phone (see [Back taps](#back-taps)).
+
+The controls stay inside the safe area. On the iPhone Duo (and only there) it is
+kept at least 28 pt from the sides and 20 pt from the top: the Duo reports no
+inset there in landscape, and the pause button and the frame counter were clipped
+by the corners. Other iPhones and iPads keep the safe area they report.
 
 ## Settings (iOS Settings app)
 
@@ -189,7 +322,7 @@ The page is in English, and in French on a device set to French
 | Back taps | `P2_BACKTAP` | enabled by default |
 | Vibrate when firing | `P2_HAPTICS` | on by default: a light Taptic Engine tap for each portal fired from the overlay (button or back tap) |
 | Tap sensitivity | `P2_BACKTAP_SENSITIVITY` | 0.75 / 1 / 1.33: thresholds are divided by this value |
-| Swap left and right | `P2_BACKTAP_INVERT` | |
+| Swap left and right | `P2_BACKTAP_INVERT` | off (on top of the correction the app applies on an iPhone Duo) |
 | Portal buttons | `P2_PORTAL_BUTTONS` | automatic (when back taps are off), always, never |
 | Record taps | `P2_BACKTAP_RAW=Documents/backtap/` | off; see [backtap.md](backtap.md) |
 | Log | `P2_LOG_FILE=Documents/game.log` | |

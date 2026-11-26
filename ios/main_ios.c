@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include "game_ios.h"
 #include "metal_ios.h"
+#include "scene_ios.h"
 #include "settings.h"
 
 int p2_main(int argc, char **argv);
@@ -88,6 +89,9 @@ int main(int argc, char **argv) {
         dup2(fileno(stderr), fileno(stdout));
         setvbuf(stderr, NULL, _IONBF, 0);
     }
+    // La scène (runtime/ios/scene_ios.m) avant que SDL ne lise l'écran : sur le grand
+    // écran de l'iPhone Duo, c'est elle qui donne sa vraie taille.
+    rt_ios_scene_wait(5);
     // Le moteur garde ouvertes ses archives VPK (172 pour Portal 2) : la limite
     // de 256 descripteurs d'une app iOS ne suffit pas (ReadFile échoue alors).
     struct rlimit files;

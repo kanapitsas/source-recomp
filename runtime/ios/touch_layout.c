@@ -1,5 +1,6 @@
 // Dispositions des commandes tactiles (voir touch_layout.h).
 #include "touch_layout.h"
+#include <math.h>
 #include <stddef.h>
 
 // Tailles de touch_controls.m : bouton 54 pt, portail 60 pt, petits boutons
@@ -65,6 +66,13 @@ const rt_touch_button *rt_touch_layout(rt_ios_layout layout, int *count) {
 }
 
 double rt_touch_look_rest(rt_ios_layout layout) { return layout == RT_IOS_LAYOUT_HL2 ? .64 : .80; }
+
+double rt_touch_stick_rest(rt_ios_layout layout, int right, int split) {
+    double rest = right ? rt_touch_look_rest(layout) : .16;
+    if (!split) return rest;
+    // Le stick de HL2 est déjà au centre ; les autres rentrent de .05 (environ 30 pt).
+    return right ? fmin(rest, .75) : rest + .05;
+}
 
 void rt_touch_place(const rt_touch_button *b, double x, double y, double w, double h, double *cx, double *cy) {
     *cx = x + w * b->ax + b->ox;

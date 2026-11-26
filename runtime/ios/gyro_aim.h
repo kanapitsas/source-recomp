@@ -1,10 +1,12 @@
 // Visée au gyroscope (iPhone) : vitesse de rotation de l'appareil -> mouvement
 // de souris relatif, ajouté à celui du stick ou du trackpad tactile.
 #pragma once
+#include "back_tap.h"   // RT_BACKTAP_PORTRAIT
 
 typedef struct {
     double counts_per_rad;   // comptes de souris par radian tourné (vitesse)
     double tighten;          // rad/s : sous ce seuil, la rotation est atténuée (tremblement de la main)
+    int screen_by_gravity;   // 1 : axe horizontal de l'écran lu dans la gravité (iPhone Duo) ; 0 : orientation de l'interface
 } rt_gyro_params;
 
 // Comptes de souris par radian à « Normal » : 1,5 fois le mouvement réel à la
@@ -21,7 +23,7 @@ int rt_gyro_enabled(int on_by_default);
 // Un échantillon de CoreMotion (repère de l'appareil) : vitesse de rotation
 // w (rad/s), gravité g (en g, vers le sol), orient = +1 si l'axe y de l'appareil
 // pointe vers la droite de l'écran (paysage gauche), -1 vers la gauche
-// (paysage droit), 0 inconnu (rien). dt en secondes. Écrit dans out le
+// (paysage droit), RT_BACKTAP_PORTRAIT si c'est l'axe x (téléphone droit), 0 inconnu (rien). dt en secondes. Écrit dans out le
 // mouvement de souris (x : droite, y : bas) ; renvoie 0 sans mouvement.
 // Lacet autour de la verticale réelle (« player space ») : tourner sur soi
 // tourne la caméra quelle que soit l'inclinaison du téléphone. Tangage autour
