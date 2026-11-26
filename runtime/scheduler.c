@@ -45,6 +45,14 @@ void rt_guest_enter(void) {
     ++depth;
     rt_guest_poll();
 }
+// Comme rt_guest_enter, sans rt_guest_poll : un thread qui tient déjà la porte
+// ne la cède pas, même un instant. Pour les rappels hôtes appelés sous un
+// verrou de la bibliothèque (alloc_app/free_app de d3d9) : une cession y
+// laisserait un autre thread prendre la porte puis attendre ce verrou.
+void rt_guest_enter_no_yield(void) {
+    if(!depth)acquire();
+    ++depth;
+}
 void rt_guest_leave(void) {
     if(!depth)abort();
     if(!--depth && pthread_mutex_unlock(&gate))abort();

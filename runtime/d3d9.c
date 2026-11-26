@@ -131,8 +131,11 @@ static void *host_metal_layer(void *user, void *hwnd, uint32_t *width, uint32_t 
 
 // Mémoire adressable par le jeu : pages invitées projetées par rt_mmap (zone
 // RT_VM_BEGIN-RT_VM_END), alignées sur la page hôte (16 Kio). La table des
-// projections est protégée par le verrou invité : rt_guest_enter est
-// réentrant, il est donc pris ici que l'appelant le tienne déjà ou non.
+// projections est protégée par le verrou invité, pris ici que l'appelant le
+// tienne déjà ou non. Sans cession (rt_guest_enter_no_yield) : la bibliothèque
+// peut appeler alloc_app/free_app en tenant un de ses verrous, et un autre
+// thread qui prendrait la porte pendant une cession pourrait attendre ce
+// verrou pendant que celui-ci attend la porte.
 static void *host_alloc_app(void *user, size_t size, size_t align) {
     (void)user;
     size_t page = (size_t)sysconf(_SC_PAGESIZE);
@@ -140,7 +143,7 @@ static void *host_alloc_app(void *user, size_t size, size_t align) {
         fprintf(stderr, "d3d9: alloc_app(%zu, align %zu) refused (max alignment %zu)\n", size, align, page);
         return NULL;
     }
-    rt_guest_enter();
+    rt_guest_enter_no_yield();
     uint32_t address = rt_mmap(NULL, 0, (uint32_t)size, 3 /* PROT_READ|PROT_WRITE */, 0x22 /* MAP_PRIVATE|MAP_ANON */, -1, 0);
     rt_guest_leave();
     if (address == UINT32_MAX) {
@@ -157,7 +160,7 @@ static void host_free_app(void *user, void *ptr, size_t size) {
         fprintf(stderr, "d3d9: free_app(%p, %zu) outside alloc_app memory: ignored\n", ptr, size);
         return;
     }
-    rt_guest_enter();
+    rt_guest_enter_no_yield();
     if (rt_munmap((uint32_t)offset, (uint32_t)size)) fprintf(stderr, "d3d9: free_app(%p, %zu) failed\n", ptr, size);
     rt_guest_leave();
 }
