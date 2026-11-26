@@ -185,7 +185,14 @@ buttons as in landscape.
 - `Info.plist.in` allows portrait, but SDL only accepts it on a phone display whose
   short side is at least 500 points (the inner display: 669; other iPhones: 440 at
   most), through `SDL_HINT_ORIENTATIONS` kept up to date by `scene_ios.m` as the
-  Duo folds and unfolds. `P2_PORTRAIT_SPLIT=0` turns the split off;
+  Duo folds and unfolds. `P2_PORTRAIT_SPLIT=0` turns the split off. The geometry request that
+  keeps the app in landscape is a setting of the scene, not a one-off: made at a launch on the
+  outer display, it stayed in force after unfolding and the inner display never rotated to
+  portrait. `scene_ios.m` therefore asks again each time the display changes (log:
+  `[ios] orientations demandées`). Upside-down portrait is not available: SDL drops it on every
+  phone, and even when the view controller allows it (and `Info.plist` lists it), iOS refuses on
+  this phone (`None of the requested orientations are supported by the view controller.
+  Requested: portraitUpsideDown; Supported: portrait, landscapeLeft, landscapeRight`);
 - in portrait, `apply_layout` (`scene_ios.m`, run from `rt_ios_scene_resync`) shrinks
   the SDL `UIWindow` to the top half (669×475) and puts a second `UIWindow` on the
   bottom half. `mainScreen.bounds` is the game's half too, so SDL and the engine see a
