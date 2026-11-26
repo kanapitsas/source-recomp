@@ -539,15 +539,14 @@ static void *wait_for_gate(void *arg) {
 }
 RT_CHECK(d3d9_alloc_app_keeps_the_guest_gate) {
     use_test_library(fake_init);
-    CPU c; rt_cpu_reset(&c); c.esp = STACK;
-    PUSH(&c, 32); PUSH(&c, RT_RETURN_SENTINEL);
-    assert(rt_shim(&c, "Direct3DCreate9") == 1 && c.eax);
+    assert(rt_d3d9_available() && fake_host);   // initialise la bibliothèque, sans objet COM
     size_t page = (size_t)sysconf(_SC_PAGESIZE);
     atomic_store(&gate_waiter_ran, 0);
     rt_guest_enter();   // comme un thread du jeu dans un appel d3d9
     pthread_t waiter;
     assert(!pthread_create(&waiter, NULL, wait_for_gate, NULL));
-    while (!atomic_load(&rt_guest_waiting)) sched_yield();   // le thread attend la porte
+    // Le thread attend la porte (borné à ~10 s).
+    for (int spins = 0; !atomic_load(&rt_guest_waiting); ++spins) { assert(spins < 10000); usleep(1000); }
     for (int i = 0; i < 64 * 1024 && !atomic_load(&gate_waiter_ran); ++i) {
         void *p = fake_host->alloc_app(fake_host->user, page, page);
         assert(p);
