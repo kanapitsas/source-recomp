@@ -5,8 +5,10 @@
 
 // Seuils (unités CoreMotion : g, rad/s, secondes). rt_backtap_defaults donne
 // les valeurs par défaut, expliquées dans back_tap.c.
-// Orientation « portrait, téléphone droit » (grand écran du Duo coupé en deux) : l'axe x de
-// l'appareil pointe vers la droite de l'écran. Avec +1/-1, c'est l'axe y (paysage).
+// Orientation de l'interface, telle que l'app la donne (jamais déduite de la gravité) : +1 / -1 en
+// paysage (l'axe y de l'appareil pointe vers la droite / la gauche de l'écran) ; en portrait, l'axe x
+// pointe vers la droite de l'écran (grand écran du Duo coupé en deux). Pas de portrait inversé : iOS ne
+// le donne pas sur ce téléphone.
 #define RT_BACKTAP_PORTRAIT 2
 
 typedef struct {
@@ -24,8 +26,6 @@ typedef struct {
     int lateral_sign;    // tape latérale : 1 convention supposée, -1 inversée, 0 désactivée
     int invert;          // 1 : gauche et droite permutées (réglage du joueur)
     int mirror;          // 1 : sens physique inversé par l'appareil (iPhone Duo, d'après son capteur), en plus de invert
-    int screen_by_gravity; // 1 : bord du bas de l'écran lu dans la gravité (iPhone Duo, dont les axes varient selon l'écran) ;
-                         // 0 : orientation de l'interface d'abord, comme avant le Duo
     int z_sign;          // 0 : indifférent ; ±1 : signe exigé de a_z au départ du pic
     float refractory;    // s : rien après un candidat pendant ce délai
     float touch_guard;   // s : rien à moins de ce délai d'un début ou d'une fin de toucher
@@ -59,7 +59,7 @@ typedef struct {
     float gravity;         // g : variation de la gravité avant le pic
     double touch_dt;       // s : toucher le plus proche (t_toucher - t), 1e9 si aucun
     int orient;            // +1 : axe y de l'appareil vers la droite de l'écran, -1 : vers la gauche,
-                           // RT_BACKTAP_PORTRAIT : axe x vers la droite (téléphone droit)
+                           // RT_BACKTAP_PORTRAIT : axe x vers la droite (portrait)
     int side;              // -1 gauche (portail bleu), +1 droite (orange), 0 aucun
     const char *method;    // "rotation", "latéral" ou NULL
     int gyro;              // retenu par la voie gyroscope seulement
@@ -81,6 +81,7 @@ typedef struct {
     double last_candidates[2];            // les deux derniers : leur vibration est exclue de l'agitation suivante
     float last_peak;                      // son pic (g) : sa vibration doit s'être amortie
     double last_inactive;                 // dernier échantillon en menu (ses touchers échappent à la surcouche)
+    int turn;                             // rt_backtap_set_turn
 } rt_backtap;
 
 void rt_backtap_defaults(rt_backtap_params *p);
@@ -98,6 +99,11 @@ int rt_backtap_env_sign(const char *name, int def);
 void rt_backtap_init(rt_backtap *d, const rt_backtap_params *p);
 // Début ou fin d'un toucher à l'écran, même horloge que les échantillons.
 void rt_backtap_touch(rt_backtap *d, double t);
+// Grand écran de l'iPhone Duo : ses axes sont tournés d'un quart de tour dans le plan de l'écran par
+// rapport à ceux du petit écran (déplié, tenu en paysage, la gravité tire selon y au lieu de x). Avec
+// on = 1, les échantillons sont ramenés au repère du petit écran (x' = -y, y' = x) avant jugement, quelle
+// que soit l'orientation. À appeler quand l'écran change (pliage), avant rt_backtap_feed.
+void rt_backtap_set_turn(rt_backtap *d, int on);
 // Un échantillon. orient : +1/-1/RT_BACKTAP_PORTRAIT (voir rt_backtap_report.orient) ou 0
 // pour le déduire de la gravité ; active : 0 en menu ou manette masquée. Rend 1 quand
 // un candidat vient d'être jugé (bilan dans *r ; tape si r->reject est NULL).

@@ -185,7 +185,14 @@ buttons as in landscape.
 - `Info.plist.in` allows portrait, but SDL only accepts it on a phone display whose
   short side is at least 500 points (the inner display: 669; other iPhones: 440 at
   most), through `SDL_HINT_ORIENTATIONS` kept up to date by `scene_ios.m` as the
-  Duo folds and unfolds. `P2_PORTRAIT_SPLIT=0` turns the split off;
+  Duo folds and unfolds. `P2_PORTRAIT_SPLIT=0` turns the split off. The geometry request that
+  keeps the app in landscape is a setting of the scene, not a one-off: made at a launch on the
+  outer display, it stayed in force after unfolding and the inner display never rotated to
+  portrait. `scene_ios.m` therefore asks again each time the display changes (log:
+  `[ios] orientations demandées`). Upside-down portrait is not available: SDL drops it on every
+  phone, and even when the view controller allows it (and `Info.plist` lists it), iOS refuses on
+  this phone (`None of the requested orientations are supported by the view controller.
+  Requested: portraitUpsideDown; Supported: portrait, landscapeLeft, landscapeRight`);
 - in portrait, `apply_layout` (`scene_ios.m`, run from `rt_ios_scene_resync`) shrinks
   the SDL `UIWindow` to the top half (669×475) and puts a second `UIWindow` on the
   bottom half. `mainScreen.bounds` is the game's half too, so SDL and the engine see a
@@ -194,31 +201,27 @@ buttons as in landscape.
 - the touch controls move into that second window (`rt_ios_scene_controls_view`).
   Their area has no top inset (it is the middle of the screen) and 20 pt on the
   sides; both sticks rest 5 % of the width further in than in landscape
-  (`rt_touch_stick_rest`). Back taps and gyro aiming work in portrait. On a Duo (model
-  `iPhone19,4`, logged at startup as `[ios] modèle …`) both read the screen's horizontal axis
-  from gravity instead of assuming how the device axes lie against the screen: gravity
-  projected on the screen plane (device x, y) points to the bottom edge of the screen, and
-  the right is that edge turned a quarter turn around z. The first version assumed an
-  iPhone's axes in portrait (x to the right) and the camera drifted diagonally on the Duo, so
-  nothing here relies on that. The interface orientation (`RT_BACKTAP_PORTRAIT`, y in
-  landscape) is only the fallback when the phone is nearly flat. For back taps the side
-  comes from the rotation about the screen's vertical axis, the push along the horizontal
-  one for edge taps, and the in-plane rotation (the hand makes the phone pivot, the same
-  way in every orientation); the light-tap (gyroscope) path looks at that same vertical
-  axis, not at device x; for gyro, yaw follows the real vertical and pitch is the
-  rotation about the horizontal axis. Other iPhones keep the earlier reading, where the
-  interface orientation decides: lying on one side, gravity points along the screen's
-  side while the game stays in landscape, and a gravity-based reading would take that side
-  for the bottom of the screen and read the tap on the wrong axis
-  (`screen_by_gravity` in `rt_backtap_params` and `rt_gyro_params`, set in `backtap_ios.m` and
-  `gyro_ios.m`, tested in `tests/checks_back_tap.c` and `tests/checks_gyro_aim.c`). The portal buttons follow the usual rule (shown
-  without back taps). Both are covered by synthetic samples (including frames with the
-  axes laid out differently and a phone held crooked) and were tried on a Duo, in portrait
-  and landscape. On the Duo the physical sign gave the opposite portal, so the app mirrors
-  left and right by itself (`rt_backtap_params.mirror`, set in `backtap_ios.m`; other iPhones
-  are unchanged). It is
-  independent of the "Swap left and right" setting, which still flips the result once more
-  on any device. The sensor log (`P2_BACKTAP_LOG=1`) helps if a side is still off;
+  (`rt_touch_stick_rest`). Back taps and gyro aiming work in landscape and portrait on both
+  displays. As on any iPhone, the interface orientation the scene reports says which device axis
+  is horizontal on the screen; gravity is never used for that (lying on one side, it points along
+  the screen's side while the game stays in landscape). The Duo only adds fixed offsets, taken
+  from recordings of a real Duo (`tools/backtap_replay.c` replays them):
+  - on the outer display the sensors are laid out like any iPhone's;
+  - on the inner display they are turned a quarter turn in the plane of the screen (held in
+    landscape, gravity runs along y), so the samples are first turned back (`x' = -y, y' = x`)
+    while the scene is that display (`rt_ios_scene_wide_display`, `rt_backtap_set_turn`,
+    `rt_gyro_params.turn`). Landscape is then read as on `main`, and portrait with x to the
+    right;
+  - back-tap side: rotation about the screen's vertical axis (x in landscape, y in portrait),
+    the push along the horizontal one for edge taps, and the in-plane rotation; the light-tap
+    (gyroscope) path looks at the same vertical axis;
+  - gyro: yaw follows the real vertical (the only use of gravity) and pitch is the rotation
+    about the horizontal axis;
+  - the physical sign gives the opposite portal on a Duo (model `iPhone19,4`, logged at startup
+    as `[ios] modèle …`), so the app mirrors left and right by itself
+    (`rt_backtap_params.mirror`, set in `backtap_ios.m`; other iPhones are unchanged). It is
+    independent of the "Swap left and right" setting, which still flips the result once more
+    on any device. The sensor log (`P2_BACKTAP_LOG=1`) helps if a side is still off;
 - the app follows the orientation iOS gives the scene at launch (it knows how the phone is
   held, including the Duo's inner display). On the inner display it keeps that choice:
   landscape, or portrait split in two; the game window is set to the game's half

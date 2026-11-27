@@ -30,7 +30,6 @@ void rt_ios_gyro_start(int on_by_default) {
     CMMotionManager *motion = [CMMotionManager new];
     if (!motion.deviceMotionAvailable) { fprintf(stderr, "[ios] gyroscope : pas de capteur (simulateur ?)\n"); return; }
     rt_gyro_params_from_env(&gyro_params);
-    gyro_params.screen_by_gravity = rt_ios_is_iphone_duo();   // ses axes ne suivent pas l'écran comme ailleurs
     gyro_queue = [NSOperationQueue new];
     gyro_queue.name = @"p2.gyro";
     gyro_queue.maxConcurrentOperationCount = 1;
@@ -59,6 +58,7 @@ void rt_ios_gyro_run(int on) {
             double g[3] = {m.gravity.x, m.gravity.y, m.gravity.z};
             double dt = last ? m.timestamp - last : 0, d[2];
             last = m.timestamp;
+            gyro_params.turn = rt_ios_scene_wide_display();   // grand écran du Duo : repère tourné d'un quart de tour
             if (!rt_gyro_delta(&gyro_params, w, g, atomic_load(&gyro_orient), dt, d)) return;
             os_unfair_lock_lock(&gyro_lock);
             if (atomic_load(&gyro_generation) == generation) { gyro_pending[0] += d[0]; gyro_pending[1] += d[1]; }

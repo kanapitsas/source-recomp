@@ -112,6 +112,14 @@ static void backtap_sample(CMDeviceMotion *m, NSError *error) {
     if (backtap_raw)
         fprintf(backtap_raw, "m %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %d %d\n", s.t, s.a[0], s.a[1], s.a[2],
                 s.w[0], s.w[1], s.w[2], s.g[0], s.g[1], s.g[2], atomic_load(&backtap_orient), active);
+    const int turn = rt_ios_scene_wide_display();   // grand écran du Duo : capteurs tournés d'un quart de tour
+    static int last_turn = -1;
+    if (turn != last_turn) {
+        last_turn = turn;
+        if (backtap_raw) fprintf(backtap_raw, "w %.4f %d\n", s.t, turn);   // rejoué par tools/backtap_replay.c
+        rt_backtap_set_turn(&backtap_detector, turn);
+        rt_backtap_set_turn(&backtap_wide, turn);
+    }
     int judged = rt_backtap_feed(&backtap_detector, &s, atomic_load(&backtap_orient), active, &r);
     rt_backtap_report rw;
     int wide = backtap_dataset_on &&
@@ -158,7 +166,7 @@ static void backtap_open_raw(const char *raw) {
     backtap_raw = fopen(path, "w");
     fprintf(stderr, "[ios] tapes au dos : enregistrement brut %s%s\n", path, backtap_raw ? "" : " impossible");
     if (backtap_raw) setvbuf(backtap_raw, NULL, _IOLBF, 0);   // tout est écrit si le jeu est tué
-    if (backtap_raw) fprintf(backtap_raw, "# m t ax ay az wx wy wz gx gy gz orient active | t t_toucher | f t_bouton_✗\n");
+    if (backtap_raw) fprintf(backtap_raw, "# m t ax ay az wx wy wz gx gy gz orient active | t t_toucher | f t_bouton_✗ | w t grand_écran\n");
 }
 
 // Jeu de données, si le joueur le demande (rt_btds_wanted).
@@ -207,8 +215,6 @@ void rt_ios_backtap_start(void) {
     // Sur l'iPhone Duo, le sens physique donne la gauche et la droite permutées (réglé sur l'appareil,
     // portrait et paysage) : on corrige ici, sans toucher au réglage « Permuter » du joueur.
     p.mirror = rt_ios_is_iphone_duo();
-    // Ses axes ne suivent pas l'écran comme sur les autres iPhone : on lit l'écran dans la gravité.
-    p.screen_by_gravity = p.mirror;
     backtap_log = rt_ios_env_flag("P2_BACKTAP_LOG", 0);
     backtap_hold = rt_ios_env_float("P2_BACKTAP_HOLD", 0.05f, 0);
     const char *raw = getenv("P2_BACKTAP_RAW");

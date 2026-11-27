@@ -25,6 +25,8 @@ typedef struct {
     float wobble;                     // geste ample et lent : 2 Hz selon z (g)
     float noise;                      // amplitude du bruit d'accélération (g)
     int orient, active;
+    int turn;                         // grand écran du Duo : repère de l'appareil tourné d'un quart de tour
+    int unaware;                      // le détecteur n'est pas prévenu (rt_backtap_set_turn jamais appelé)
     double active_from;               // en menu jusque-là (0 : toujours la valeur active)
     rt_backtap_params params;
 } Scene;
@@ -34,6 +36,7 @@ static float half_sine(double x, double width) { return x < 0 || x > width ? 0 :
 
 static Outcome play(const Scene *sc) {
     rt_backtap d; rt_backtap_init(&d, &sc->params);
+    rt_backtap_set_turn(&d, sc->turn && !sc->unaware);
     Outcome o; memset(&o, 0, sizeof(o));
     unsigned seed = 12345;
     int touched = 0;
@@ -71,6 +74,10 @@ static Outcome play(const Scene *sc) {
             s.g[0] = sc->gravity[0] * (float)cos(a) + sc->gravity[2] * (float)sin(a);
             s.g[2] = -sc->gravity[0] * (float)sin(a) + sc->gravity[2] * (float)cos(a);
             s.w[1] += 1;
+        }
+        if (sc->turn) {   // les données ci-dessus sont dans le repère du petit écran ; le capteur du grand le donne tourné (x' = -y, y' = x)
+            float *v[3] = {s.a, s.w, s.g};
+            for (int k = 0; k < 3; ++k) { const float xp = v[k][0], yp = v[k][1]; v[k][0] = yp; v[k][1] = -xp; }
         }
         // Toucher : livré par UIKit ~20 ms après son horodatage.
         while (touched < sc->ntouch && 100 + sc->touches[touched] + 0.020 <= t) rt_backtap_touch(&d, 100 + sc->touches[touched++]);
@@ -119,25 +126,22 @@ RT_CHECK(backtap_left_and_right_back_taps_pick_their_side) {
 // est faible et de signe trompeur, celle autour de z (la main qui tape fait
 // pivoter le téléphone) donne le côté.
 // Portrait, téléphone droit (axe x vers la droite de l'écran, gravité selon -y) : la position
-// de la tape selon x donne le couple autour de y ; l'orientation vient de l'écran ou de la gravité.
+// de la tape selon x donne le couple autour de y ; l'orientation vient de l'écran.
 static Scene portrait_scene(double rate) {
     Scene sc = scene(rate);
     sc.orient = RT_BACKTAP_PORTRAIT;
     sc.gravity[0] = 0; sc.gravity[1] = -0.8f; sc.gravity[2] = -0.6f;
-    sc.params.screen_by_gravity = 1;   // le portrait n'existe que sur l'iPhone Duo
     return sc;
 }
 RT_CHECK(backtap_portrait_left_and_right_back_taps_pick_their_side) {
     for (int r = 0; r < 2; ++r)
-        for (int known = 0; known <= 1; ++known)
-            for (int side = -1; side <= 1; side += 2) {
-                Scene sc = portrait_scene(kRates[r]);
-                if (!known) sc.orient = 0;   // déduite de la gravité
-                sc.taps[sc.ntaps++] = (Tap){1.0, 0, 2, 0.3f, 0.4f, 0, 0, 0, side};
-                Outcome o = play(&sc);
-                assert(o.reports == 1 && o.accepted == 1);
-                assert(o.side[0] == side && !strcmp(o.method[0], "rotation"));
-            }
+        for (int side = -1; side <= 1; side += 2) {
+            Scene sc = portrait_scene(kRates[r]);
+            sc.taps[sc.ntaps++] = (Tap){1.0, 0, 2, 0.3f, 0.4f, 0, 0, 0, side};
+            Outcome o = play(&sc);
+            assert(o.reports == 1 && o.accepted == 1);
+            assert(o.side[0] == side && !strcmp(o.method[0], "rotation"));
+        }
 }
 RT_CHECK(backtap_portrait_corner_tap_and_edge_tap) {
     for (int side = -1; side <= 1; side += 2) {
@@ -154,24 +158,10 @@ RT_CHECK(backtap_portrait_corner_tap_and_edge_tap) {
     assert(o.accepted == 1 && o.side[0] == -1 && !strcmp(o.method[0], "latéral"));
 }
 
-// Le côté se lit dans le plan de l'écran, avec la gravité : l'orientation passée n'y change rien tant
-// que le téléphone n'est pas à plat (iPhone Duo : axes de l'appareil posés autrement qu'un iPhone).
-RT_CHECK(backtap_side_does_not_depend_on_the_orientation_given_when_not_flat) {
-    for (int orient = -1; orient <= RT_BACKTAP_PORTRAIT; ++orient)
-        for (int side = -1; side <= 1; side += 2) {
-            Scene sc = scene(100);
-            sc.params.screen_by_gravity = 1;
-            back_tap(&sc, 1.0, side);   // physique du paysage gauche (gravité +x)
-            sc.orient = orient;
-            Outcome o = play(&sc);
-            assert(o.accepted == 1 && o.side[0] == side);
-        }
-}
-
-// Hors iPhone Duo (screen_by_gravity = 0), l'orientation de l'interface décide, comme avant le Duo :
+// L'orientation de l'interface décide du côté, sur tous les appareils, Duo compris :
 // couché sur le côté, la gravité tire vers le côté de l'écran (axe y) alors que le jeu reste en paysage ;
 // elle ne doit pas être prise pour le bas de l'écran (même côté lu quelle que soit la tape).
-RT_CHECK(backtap_without_screen_by_gravity_the_interface_orientation_decides) {
+RT_CHECK(backtap_the_interface_orientation_decides_even_lying_on_a_side) {
     for (int r = 0; r < 2; ++r)
         for (int orient = -1; orient <= 1; orient += 2)
             for (int side = -1; side <= 1; side += 2) {
@@ -187,6 +177,36 @@ RT_CHECK(backtap_without_screen_by_gravity_the_interface_orientation_decides) {
     back_tap(&sc, 1.0, 1);
     Outcome o = play(&sc);
     assert(o.accepted == 0 && !strcmp(o.reject[0], "orientation inconnue"));
+}
+
+// Grand écran du Duo : le capteur est tourné d'un quart de tour dans le plan de l'écran (déplié, tenu en
+// paysage, la gravité tire selon y). Avec rt_backtap_set_turn, les côtés sont lus comme sur le petit écran,
+// dans les deux paysages, y compris couché sur le côté ; sans, ils ne le seraient pas. En portrait, même
+// repère ramené à celui d'un iPhone.
+RT_CHECK(backtap_wide_display_sensor_frame_is_turned_back) {
+    for (int r = 0; r < 2; ++r)
+        for (int side = -1; side <= 1; side += 2) {
+            for (int orient = -1; orient <= 1; orient += 2)
+                for (int lying = 0; lying <= 1; ++lying) {
+                    Scene sc = scene(kRates[r]); sc.orient = orient; sc.turn = 1;
+                    sc.gravity[0] = (lying ? 0.1f : 0.8f) * (float)orient;   // dans le repère du petit écran
+                    if (lying) { sc.gravity[1] = -0.8f; sc.gravity[2] = -0.5f; }
+                    back_tap(&sc, 1.0, side);
+                    Outcome o = play(&sc);
+                    assert(o.reports == 1 && o.accepted == 1);
+                    assert(o.side[0] == side && !strcmp(o.method[0], "rotation"));
+                }
+            Scene sc = portrait_scene(kRates[r]); sc.turn = 1;
+            sc.taps[sc.ntaps++] = (Tap){1.0, 0, 2, 0.3f, 0.4f, 0, 0, 0, side};
+            Outcome o = play(&sc);
+            assert(o.reports == 1 && o.accepted == 1);
+            assert(o.side[0] == side && !strcmp(o.method[0], "rotation"));
+        }
+    // Sans le quart de tour rendu, le même capteur ne donne pas le côté (rotation autour de y, pas de x).
+    Scene sc = scene(100); sc.turn = 1; sc.unaware = 1;
+    back_tap(&sc, 1.0, -1);
+    Outcome o = play(&sc);
+    assert(o.accepted == 0);
 }
 
 // mirror (iPhone Duo) et invert (réglage du joueur) permutent chacun la gauche et la droite ;
